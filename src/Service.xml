@@ -1,0 +1,1451 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<WebService>
+	<_DateBase_>
+		<ECommerce>
+			<dbURL>jdbc:mysql://localhost:3306/ecommerce?characterEncoding=utf8&amp;useOldAliasMetadataBehavior=true</dbURL>
+			<userName>root</userName>
+			<userPwd>ly123456</userPwd>
+			<driver>com.mysql.jdbc.Driver</driver>
+		</ECommerce>
+		<Portal>
+			<dbURL>jdbc:mysql://localhost:3306/portal?characterEncoding=utf8&amp;useOldAliasMetadataBehavior=true</dbURL>
+			<userName>root</userName>
+			<userPwd>ly123456</userPwd>
+			<driver>com.mysql.jdbc.Driver</driver>
+		</Portal>   
+		<NEO4J>
+            <dbURL>jdbc:neo4j:http://127.0.0.1:7474/</dbURL>
+            <userName>neo4j</userName>
+            <userPwd>lyhunter</userPwd>
+            <driver>org.neo4j.jdbc.Driver</driver>
+        </NEO4J>
+<!--         <DBSchool>
+            <dbURL>jdbc:oracle:thin:@120.76.24.41:1521:PSPRODDB</dbURL>
+            <userName>psnavigator</userName>
+            <userPwd>PSchool#123654</userPwd>
+            <driver>oracle.jdbc.driver.OracleDriver</driver>
+        </DBSchool> -->
+	</_DateBase_>
+	<_GlobalParams_>
+		<DoExtSend>[抄送相关领导]</DoExtSend>
+	</_GlobalParams_>
+	<_Schedule_Long Rem="长工作类型">TestConnect;</_Schedule_Long>
+	<_Schedule_Normal Rem="10秒钟工作" backup="">Neo4jLoadResult</_Schedule_Normal>
+	<GetNeo4Json>
+    	<DO_SQL Db="NEO4J" To="@_sql_result" Type="query" Trans="json" Total="@_total" Debug="..."><![CDATA[ 
+    	 MATCH {@_@URL.match} WHERE {@_@URL.where} RETURN {@_@URL.return};   
+    	]]></DO_SQL>
+        <PRINT>|Doing at test neo4j...</PRINT>
+        <RETURN Type="json" ><![CDATA[{"db":"NEO4J","total":"{@_total}","rows":{@_sql_result} }]]></RETURN>
+    </GetNeo4Json>
+    <GetExecStr>
+    	<RETURN Type="html" Test="!{@_@URL.cmd}"><![CDATA[command string is null!]]></RETURN>
+    	<SET To="@_exec_result" Method="GetExec"  Debug="..."><![CDATA[{@_@URL.cmd}]]></SET>
+        <PRINT>|Doing at test exec...</PRINT>
+        <RETURN Type="html" ><![CDATA[{@_exec_result}]]></RETURN>
+    </GetExecStr>
+	<Neo4jLoadResult  TimeCycle="1000" Rem="循环取得Neo4j文件发布Portal" Debug="Yes;" Clear="\n;\t">
+		<SET  To="@_webpath" Debug=".">/Users/yanglee/eclipse/workspace/.metadata/.plugins/org.eclipse.wst.server.core/tmp1/wtpwebapps/YICTWEB</SET>
+		<CALL Method="FileUtils.listFiles" To="@_file_return" Debug="...">
+			<Src>{@_webpath}/FileUpload/temp</Src>
+			<Trans>list</Trans>
+		</CALL>
+		<FOR Test="{@_file_return}" In="@_file_return" To="@_rec_num"  Rem="循环查询到的文件名','分割">
+			<!-- 获取文件 -->
+			<PRINT>doing file->"{#.}"</PRINT>
+			<!-- <SET  To="@_file_name" Debug=".">{#_.}</SET> -->
+			<SET  To="@_redir_url" Debug=".">http://localhost:8080/YICTWEB/FileUpload/{@_@RunNowDate}/{#_.}</SET>
+			<!-- <XPATH Test="{@_@URL.view}" To="@_view_sql" From="@_@THIS_CFG" Path="{@_@URL.view}" Debug="..."/> -->
+			<DO_SQL Db="Portal" To="@_site_sql" Type="query" Total="@_total" Trans="map:#" Debug="..."><![CDATA[  
+			select *,SUBSTRING_INDEX('{#_.}','__',-1) as cut_name 
+			from 
+				(
+				SELECT concat(a.NAME,'_',b.NAME,'_',c.NAME) AS NAME,c.id AS id FROM sys_site AS a JOIN sys_site AS b ON b.pid=a.id JOIN sys_site AS c ON c.pid=b.id WHERE a.pid =2833
+				UNION
+				SELECT concat(a.NAME,'_',b.NAME) AS NAME,b.id AS id FROM sys_site AS a JOIN sys_site AS b ON b.pid=a.id WHERE a.pid =2833
+				UNION
+				SELECT name,id from sys_site where pid=2833
+				) AS d
+			where name=SUBSTRING_INDEX('{#_.}','__',1)   ]]></DO_SQL>
+			<PRINT Test="{@_total}!=0">found:{@_site_sql.0.id}</PRINT>
+			<PRINT Test="{@_total}==0">not found</PRINT>
+			<SET  Test="{@_total}==0" To="@_file_name" Debug="...">{#_.}</SET>
+			<SET  Test="{@_total}!=0" To="@_file_name" Debug="...">{@_site_sql.0.cut_name}</SET>
+			<SET  Test="{@_total}==0" To="@_site_id" Debug="...">2857</SET>
+			<SET  Test="{@_total}!=0" To="@_site_id" Debug="...">{@_site_sql.0.id}</SET>
+			<!-- 发布文件 -->
+			<CALL Method="FileUtils.Delete" Debug="...">
+				<Src>{@_webpath}/FileUpload/{@_@RunNowDate}/{#_.}</Src>
+			</CALL>
+			<CALL Method="FileUtils.moveFileToDirectory" Debug="...">
+				<Src>{@_webpath}/FileUpload/temp/{#_.}</Src>
+				<Dest>{@_webpath}/FileUpload/{@_@RunNowDate}</Dest>
+				<Params>create_dir</Params>
+			</CALL>
+			<!-- 写入数据库 -->
+			<DO_SQL Db="Portal" To="@_last_ins_id" Rem="write_urllink"  Params="return_keys" Type="update" Debug="..." ><![CDATA[ 
+				INSERT INTO sys_obj (subject,name,create_time,created_to,type,work_name,link,user_name,site_id,flag) 
+				VALUES('{@_file_name}','{@_file_name}','{@_@RunNowTime}','{@_@RunNowTime}','Link','{#_.}','{@_redir_url}','admin','2833','1')
+			]]></DO_SQL>
+			<DO_SQL Db="Portal" Rem="write_urllink" Type="update" Debug="..." ><![CDATA[ 
+				insert into `sys_publish`(`is_read`, `obj_id`, `create_time`, `user_id`, `site_id`, `type`)
+				values(1, '{@_last_ins_id}', '{@_@RunNowTime}', 1, {@_site_id}, 0)
+			]]></DO_SQL>
+		</FOR>
+    </Neo4jLoadResult>
+    <PortalAddSiteUrl Debug="Yes;">
+    	<RETURN Type="html"  Test="!{@_@URL.pid}"><![CDATA[Missing parameter &pid=*** at query link!]]></RETURN>
+    	<RETURN Type="html"  Test="!{@_@URL.name}"><![CDATA[Missing parameter &url_name=*** at query link!]]></RETURN>
+    	<RETURN Type="html"  Test="!{@_@URL.url}"><![CDATA[Missing parameter &url=*** at query link!]]></RETURN>
+    	<PRINT>appending URL({@_@URL.name}):"{@_@URL.url}"....</PRINT>
+    	<SET  To="@_file_name" Debug="...">{@_@URL.name}</SET>
+		<SET  To="@_site_id" Debug="...">{@_@URL.pid}</SET>
+		<SET  To="@_redir_url" Debug="...">{@_@URL.url}</SET>
+		<!-- 写入数据库 -->
+			<DO_SQL Db="Portal" To="@_last_ins_id" Rem="write_urllink"  Params="return_keys" Type="update" Debug="..." ><![CDATA[ 
+				INSERT INTO sys_obj (subject,name,create_time,created_to,type,work_name,link,user_name,site_id,flag) 
+				VALUES('{@_file_name}','{@_file_name}','{@_@RunNowTime}','{@_@RunNowTime}','Link','{@_file_name}','{@_redir_url}','admin','2833','1')
+			]]></DO_SQL>
+			<DO_SQL Db="Portal" Rem="write_urllink" Type="update" Debug="..." ><![CDATA[ 
+				insert into `sys_publish`(`is_read`, `obj_id`, `create_time`, `user_id`, `site_id`, `type`)
+				values(1, '{@_last_ins_id}', '{@_@RunNowTime}', 1, {@_site_id}, 0)
+			]]></DO_SQL>
+    	<RETURN>success!</RETURN>
+    </PortalAddSiteUrl>
+	<PortalUpdateSiteUrl Debug="Yes;">
+    	<RETURN Type="html"  Test="!{@_@URL.id}"><![CDATA[Missing parameter &id=*** at query link!]]></RETURN>
+    	<RETURN Type="html"  Test="!{@_@URL.name}"><![CDATA[Missing parameter &url_name=*** at query link!]]></RETURN>
+    	<RETURN Type="html"  Test="!{@_@URL.url}"><![CDATA[Missing parameter &url=*** at query link!]]></RETURN>
+    	<PRINT>replacing URL({@_@URL.name}):"{@_@URL.url}"....</PRINT>
+		<!-- 写入数据库 -->
+		<DO_SQL Db="Portal" To="@_last_ins_id" Rem="write_urllink"  Params="return_keys" Type="update" Debug="..." ><![CDATA[ 
+			REPLACE sys_obj (id,subject,name,work_name,link) 
+			VALUES('{@_@URL.id}','{@_@URL.name}','{@_@URL.name}','{@_@URL.name}','{@_@URL.url}')
+		]]></DO_SQL>
+    	<RETURN>success {@_last_ins_id}!</RETURN>
+    </PortalUpdateSiteUrl>
+	<PortalDelSiteUrl Debug="Yes;">
+    	<RETURN Type="html"  Test="!{@_@URL.id}"><![CDATA[Missing parameter &obj_id=*** at query link!]]></RETURN>
+		<!-- <RETURN Type="html"  Test="!{@_@URL.pid}"><![CDATA[Missing parameter &pid=*** at query link!]]></RETURN> -->
+    	<PRINT>delete URL({@_@URL.name}):"{@_@URL.url}"....</PRINT>
+		<!-- 写入数据库 -->
+		<DO_SQL Db="Portal" Type="update" Debug="..." ><![CDATA[ 
+			DELETE FROM  sys_obj  WHERE id={@_@URL.id}
+		]]></DO_SQL>
+		<DO_SQL Db="Portal" Type="update" Debug="..." backup="site_id={@_@URL.pid} and"><![CDATA[ 
+			DELETE FROM  sys_publish  WHERE  obj_id={@_@URL.id}
+		]]></DO_SQL>
+    	<RETURN>success!</RETURN>
+    </PortalDelSiteUrl>
+    <Neo4jLoadResult_Backup>
+    	<!--Portal-Service-model-sysObj-insertObjBySite: sysObj.set("name", name).set("params", null).set("create_time", new Date())
+			  .set("type", "Form").set("created_to", new Date()).set("work_name","填报表单")
+				.set("link", "default").set("user_name", userName).set("site_id", siteId).save(); -->
+    </Neo4jLoadResult_Backup>
+	<TableauTicket Rem="测试大数据系统连接" Debug="Yes;." Clear="\n;\t" TimeCycle="10">
+		<CALL Method="GetTableauTicket" To="@_tableau_ticket" Debug=".">
+			<Url>https://data.ncpachina.org/trusted</Url>
+			<User>demo50</User>
+			<Site></Site>
+			<RemoteAddr></RemoteAddr>
+		</CALL>
+	    <PRINT><![CDATA[{@_tableau_ticket}]]></PRINT>
+		<SET To="@_redir_url">https://data.ncpachina.org/trusted/{@_tableau_ticket}/{@_@URL.view}</SET>
+		<!--<RETURN Type="html"><![CDATA[{@_redir_url}]]></RETURN>-->
+		<RETURN Type="html"><![CDATA[
+		<!DOCTYPE html><html><head><meta charset="utf-8"><script type="text/javascript">window.location.href='{@_redir_url}'</script></head><body>	reload wait....</body></html>
+		]]></RETURN>
+	</TableauTicket>
+	<TestConnect Rem="保持数据库畅通" TimeCycle="200" Debug="Yes;.">
+        <DO_SQL Db="ECommerce" To="@_from_sql" Type="query" Trans="list" Debug="PvIn"><![CDATA[  select * from product where 1=1   ]]></DO_SQL>
+        <PRINT>|Doing at test connect2...</PRINT>
+	</TestConnect>
+	<TestSchedule_Minute  Rem="测试定时">
+		<PRINT To="ScheduleMinute" Type="append">|Doing at {@_@RunNowTime}...</PRINT>
+	</TestSchedule_Minute>
+	<Login Rem="取得JSON格式表格数据;logout 为user，pass为空" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.user} || !{@_@URL.user}"><![CDATA[Missing parameter &user=*** or &pass=*** at query link!]]></RETURN>
+        <DO_SQL Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="json" Total="@_total" Debug=".."><![CDATA[
+            select customer_id from Login where login_name={@_@URL.user} and password='{@_@URL.password}'
+        ]]></DO_SQL>
+        <RETURN Test="{@_total}==0" Type="json" AddSession=""><![CDATA[{"db":"ecommerce","total":"{@_total}","data":"{@_sql_result}","session":""}]]></RETURN>
+        <CALL Method="Session.Get" To="@_Session" Params="true"/>
+        <CALL Method="Session.Set">
+        		<customer_id>{@_sql_result.0.customer_id}</customer_id>
+        		<login_name>{@_sql_result.0.login_name}</login_name>
+        </CALL>
+        <RETURN Session="{@_Session.__id}:300"><![CDATA[{"db":"ecommerce","total":"{@_total}","data":{@_sql_result} },"session":"{@_Session.__id}"]]></RETURN>
+    </Login>
+	<FileAction Rem="取得学生成绩" Debug="Yes;" Clear="\n;\t"  AddParams="TermID;TermID1;TermID2;TermFirstDay">
+		<RETURN Type="html"  Test="!{@_@URL.src} || !{@_@URL.method} "><![CDATA[Missing parameter &table=***&col=***,*** at query link!]]></RETURN>
+        <CALL Test="{@_@URL.method}==move_file" Method="FileUtils.moveFileToDirectory" Debug="...">
+			<Src>{@_@URL.src}</Src>
+			<Dest>{@_@URL.dest}</Dest>
+			<Params>true</Params>
+		</CALL>
+		<RETURN Test="{@_@URL.method}==json" Type="html"><![CDATA[ ["success"] ]]></RETURN>
+		<CALL Test="{@_@URL.method}==dir" Method="FileUtils.listFiles" To="@_file_return" Debug="...">
+			<Src>{@_@URL.src}</Src>
+			<Ext>{@_@URL.ext}</Ext>
+			<Params>{@_@URL.param}</Params>
+		</CALL>
+		<CALL Test="{@_@URL.method}==del" To="@_file_return" Method="FileUtils.Delete" Debug="...">
+			<Src>{@_@URL.src}</Src>
+			<Ext>{@_@URL.ext}</Ext>
+			<Params>return_dir</Params>
+		</CALL>
+		<RETURN Test="{@_@URL.method}==dir || {@_@URL.method}==del " Type="json"><![CDATA[{"dir":"{@_@URL.src}", "files": [{@_file_return}]}]]></RETURN>
+    </FileAction>
+    <GetTableXml2  Db="ECommerce" Rem="取得表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="TermID;TermID1;TermID2;TermFirstDay">
+        <DO_SQL Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="xml" Debug="..."><![CDATA[
+            select * from test where 1=1
+        ]]></DO_SQL> 
+        <RETURN Type="xml"><![CDATA[
+			<?xml version="1.0" encoding="utf-8"?>
+			<SQLResult DB="ecommerce">
+				<Table name="test">{@_sql_result}</Table>
+			</SQLResult>]]>
+		</RETURN>
+    </GetTableXml2>
+	<GetTableXml2Xsl  Db="ECommerce" Rem="取得表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="TermID;TermID1;TermID2;TermFirstDay">
+        <DO_SQL Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="xml" Debug="..."><![CDATA[
+            select * from test where 1=1
+        ]]></DO_SQL> 
+		<XSLT To="@_result_html" Path="test2.xsl"><![CDATA[
+			<?xml version="1.0" encoding="utf-8"?>
+			<SQLResult DB="ecommerce">
+				<Table name="test">{@_sql_result}</Table>
+			</SQLResult>
+		]]></XSLT>
+        <RETURN Type="html"><![CDATA[  {@_result_html}  ]]></RETURN>
+    </GetTableXml2Xsl>
+    <GetTableXml  Db="ECommerce" Rem="取得data" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table}"><![CDATA[Missing parameter &table=*** at query link!]]></RETURN>
+        <DO_SQL Test="!{@_@URL.col}" Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[
+            select * from {@_@URL.table} where 1=1
+        ]]></DO_SQL>
+        <DO_SQL Test="{@_@URL.col}" Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[
+            select {@_@URL.col} from {@_@URL.table} where 1=1
+        ]]></DO_SQL>
+        <SET To="@_xml_part" Type="append" Debug=""><![CDATA[<Table name="test">{@_sql_result}</Table>]]></SET>
+        <PRINT To="test.xml"><![CDATA[<?xml version="1.0" encoding="utf-8"?><SQLResult DB="ecommerce">{@_xml_part}</SQLResult>]]></PRINT>
+        <XSLT Test="{@_@URL.xsl}" To="@_result_html" Path="{@_@URL.xsl}"><![CDATA[<?xml version="1.0" encoding="utf-8"?><SQLResult DB="ecommerce">{@_xml_part}</SQLResult>]]></XSLT>
+        <RETURN Test="{@_@URL.xsl}" Type="html"><![CDATA[  {@_result_html}  ]]></RETURN>
+        <SET Test="!{@_@URL.xsl}" To="@_result_html"><![CDATA[<?xml version="1.0" encoding="utf-8"?><SQLResult DB="ecommerce">{@_xml_part}</SQLResult>]]></SET>
+        <RETURN Test="!{@_@URL.xsl}" Type="xml" ><![CDATA[  {@_result_html}  ]]></RETURN>
+    </GetTableXml>
+	<GetTableJson2 Rem="取得JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table} || !{@_@URL.col}"><![CDATA[Missing parameter &table=***&col=***,*** at query link!]]></RETURN>
+        <DO_SQL Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="json" Total="@_total" Debug=".."><![CDATA[
+            select {@_@URL.col} from {@_@URL.table} where 1=1
+        ]]></DO_SQL>
+        <RETURN Type="json"><![CDATA[{"db":"ecommerce","total":"{@_total}","rows":{@_sql_result} }]]></RETURN>
+    </GetTableJson2>
+    <GetTableJson3 Rem="取得JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.col}"><![CDATA[Missing parameter &col=***,*** at query link!]]></RETURN>
+        <RETURN Type="html"  Test="!{@_@URL.table} &amp;&amp; !{@_@URL.view}"><![CDATA[Missing parameter &table or & view=*** at query link!]]></RETURN>
+        <XPATH Test="{@_@URL.view}" To="@_view_sql" From="@_@THIS_CFG" Path="{@_@URL.view}" Debug="..."/>
+        <SET  To="condition">({@_EXIT? @_@URL.conditions : '1=1'})</SET>
+        <!-- PAGE INFO -->
+        <SET  To="@_start" Debug=".">{@_EXIT? @_@URL.start : '0'}</SET>
+        <SET  To="@_length"  Debug=".">{@_EXIT? @_@URL.length : '20'}</SET>
+        <SET  To="@_length" Test="{@_@URL.ui_type}==easyui"  Debug=".">{@_EXIT? @_@URL.rows : @_length}</SET>
+        <SET  To="@_start" Test="{@_@URL.ui_type}==easyui" Method="CalculateInt"  Debug=".">({@_EXIT? @_@URL.page : "1"}-1)*{@_length}</SET>	
+        <XPATH Rem="Session" To="@_db_auth_test" From="@_@THIS_CFG" Path="//_TableDefine/{@_@URL.table}/@AuthReadTest" Parse="on" Debug="..."/>
+        <ACTIONS Rem="SessionProcess" Test="{@_db_auth_test}!=null">
+        		<CALL Method="Session.Get" To="@_Session" Params="false"/>
+        		<RETURN Test="{@_Session}==null">__NOT_LOGIN__</RETURN>
+        		<SET  To="condition_1" type="append"> and '{@_db_auth_test}'</SET>
+        </ACTIONS>
+        <SET Test="{@_@URL.order}" To="@_order_by" Debug="...">order by {@_@URL.order}</SET>
+        <DO_SQL Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="json" Total="@_total" Debug="..."><![CDATA[
+            select {@_@URL.col} from {@_EXIT? @_@URL.table : @_view_sql } where {condition} 
+        ]]></DO_SQL>
+        <DO_SQL Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="json" Debug="..."><![CDATA[
+            select {@_@URL.col} from {@_EXIT? @_@URL.table : @_view_sql } where {condition} {@_EXIT? @_order_by : } limit {@_start},{@_length}
+        ]]></DO_SQL>
+        <RETURN Type="json" Test="{@_@URL.ui_type}!=easyui"><![CDATA[{"db":"ecommerce","total":"{@_total}","data":{@_sql_result} }]]></RETURN>
+        <RETURN Type="json" Test="{@_@URL.ui_type}==easyui"><![CDATA[{"db":"ecommerce","page":"{@_@URL.page}","records":"{@_EXIT? @_@URL.records : '20' }","total":"{@_total}","rows":{@_sql_result} }]]></RETURN>
+    </GetTableJson3>
+	<GetTableJson4_bak Rem="取得JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.col}"><![CDATA[Missing parameter &col=***,*** at query link!]]></RETURN>
+        <RETURN Type="html"  Test="!{@_@URL.table} &amp;&amp; !{@_@URL.view}"><![CDATA[Missing parameter &table or & view=*** at query link!]]></RETURN>
+        
+        <XPATH Test="{@_@URL.view}" To="@_view_sql" From="@_@THIS_CFG" Path="{@_@URL.view}" Debug="..."/>
+        <SET  To="condition">({@_EXIT? @_@URL.conditions : '1=1'})</SET>
+		<PRINT>site_pid={@_@URL.site_pid}; {@_@URL.queryParams[work_name]}</PRINT>
+		<!--Group-->
+		<DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_work_name" Type="query" Trans="json" Total="@_total" Debug=".."><![CDATA[
+            select work_name as value,work_name as label from {@_EXIT? @_@URL.table : @_view_sql } where {condition} group by work_name
+        ]]></DO_SQL>
+		<!-- <PRINT>{@_sql_work_name}</PRINT> -->
+		<!--条件判断-->
+		<SET  To="condition" Debug="." Type="append" Test="{@_@URL.queryParams[work_name]}"> and work_name like '%{@_@URL.queryParams[work_name]}%'</SET>
+		<SET  To="condition" Debug="." Type="append" Test="{@_@URL.queryParams[name]}"> and name like '%{@_@URL.queryParams[name]}%'</SET>
+		<SET  To="condition" Debug="." Type="append" Test="{@_@URL.queryParams[subject]}"> and subject like '%{@_@URL.queryParams[subject]}%'</SET>
+		<PRINT>condition: {condition}></PRINT>
+        <!-- PAGE INFO -->
+        <SET  To="@_start" Debug=".">{@_EXIT? @_@URL.start : '0'}</SET>
+        <SET  To="@_length"  Debug=".">{@_EXIT? @_@URL.length : '20'}</SET>
+        <SET  To="@_length" Test="{@_@URL.ui_type}==easyui"  Debug=".">{@_EXIT? @_@URL.rows : @_length}</SET>
+        <SET  To="@_start" Test="{@_@URL.ui_type}==easyui" Method="CalculateInt"  Debug=".">({@_EXIT? @_@URL.page : "1"}-1)*{@_length}</SET>	
+        <XPATH Rem="Session" To="@_db_auth_test" From="@_@THIS_CFG" Path="//_TableDefine/{@_@URL.table}/@AuthReadTest" Parse="on" Debug="..."/>
+        <ACTIONS Rem="SessionProcess" Test="{@_db_auth_test}!=null">
+        		<CALL Method="Session.Get" To="@_Session" Params="false"/>
+        		<RETURN Test="{@_Session}==null">__NOT_LOGIN__</RETURN>
+        		<SET  To="condition_1" type="append"> and '{@_db_auth_test}'</SET>
+        </ACTIONS>
+        <SET Test="{@_@URL.order}" To="@_order_by" Debug="...">order by {@_@URL.order}</SET>
+        <DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_result" Type="query" Trans="json" Total="@_total" Debug=".."><![CDATA[
+            select {@_@URL.col} from {@_EXIT? @_@URL.table : @_view_sql } where {condition} 
+        ]]></DO_SQL>
+        <DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_result" Type="query" Trans="json" Debug=".."><![CDATA[
+            select {@_@URL.col} from {@_EXIT? @_@URL.table : @_view_sql } where {condition} {@_EXIT? @_order_by : } limit {@_start},{@_length}
+        ]]></DO_SQL>
+        <RETURN Type="json" Test="{@_@URL.ui_type}!=easyui"><![CDATA[{"db":"ecommerce","total":"{@_total}","data":{@_sql_result} }]]></RETURN>
+        <RETURN Type="json" Test="{@_@URL.ui_type}==easyui"><![CDATA[{"db":"ecommerce","page":"{@_@URL.page}","records":"{@_EXIT? @_@URL.records : '20' }","total":"{@_total}","rows":{@_sql_result},"group_work_name":{@_sql_work_name} }]]></RETURN>
+    </GetTableJson4_bak>
+    <GetTableJson4 Rem="取得JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.col}"><![CDATA[Missing parameter &col=***,*** at query link!]]></RETURN>
+        <RETURN Type="html"  Test="!{@_@URL.table} &amp;&amp; !{@_@URL.view}"><![CDATA[Missing parameter &table or & view=*** at query link!]]></RETURN>
+		<XPATH Test="{@_@URL.view}" To="@_view_sql" From="@_@THIS_CFG" Path="{@_@URL.view}" Debug="..."/>
+        <SET  To="condition">({@_EXIT? @_@URL.conditions : '1=1'})</SET>
+		<PRINT>site_pid={@_@URL.conditions}; {@_@URL.queryParams[work_name]}</PRINT>
+		<!--Group-->
+		<!-- <DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_work_name" Type="query" Trans="json" Total="@_total" Debug="..."><![CDATA[
+            select work_name as value,work_name as label from {@_EXIT? @_@URL.table : @_view_sql } where {condition} group by work_name
+        ]]></DO_SQL>
+		<DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_area" Type="query" Trans="json" Total="@_total" Debug="..."><![CDATA[
+            select area as value,area as label from {@_EXIT? @_@URL.table : @_view_sql } where {condition} group by area
+        ]]></DO_SQL>
+		<DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_date" Type="query" Trans="json" Total="@_total" Debug="..."><![CDATA[
+            select date as value,date as label from {@_EXIT? @_@URL.table : @_view_sql } where {condition} group by date
+        ]]></DO_SQL> -->
+        <SET To="@_group_result" Debug="."></SET>
+		<FOR Test="{@_@URL.group}" In="@_@URL.group" To="@_rec_num" Rem="" Debug="...">
+			<DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_result" Type="query" Trans="json" Total="@_total" Debug="..."><![CDATA[
+				select {#_.} as value,{#_.} as label from {@_EXIT? @_@URL.table : @_view_sql } where {condition} group by {#_.}
+			]]></DO_SQL>
+			<SET To="@_group_result" Debug="." type="append">,"group_{#_.}":{@_sql_result}</SET>
+        </FOR>
+		<SET  Test="{@_@URL.conditions_param}" To="condition" Debug="." Type="append" > and({@_@URL.conditions_param}) </SET>
+		<PRINT>condition: {condition}></PRINT>
+        <!-- PAGE INFO -->
+        <SET  To="@_start" Debug=".">{@_EXIT? @_@URL.start : '0'}</SET>
+        <SET  To="@_length"  Debug=".">{@_EXIT? @_@URL.length : '20'}</SET>
+        <SET  To="@_length" Test="{@_@URL.ui_type}==easyui"  Debug=".">{@_EXIT? @_@URL.rows : @_length}</SET>
+        <SET  To="@_start" Test="{@_@URL.ui_type}==easyui" Method="CalculateInt"  Debug=".">({@_EXIT? @_@URL.page : "1"}-1)*{@_length}</SET>	
+        <XPATH Rem="Session" To="@_db_auth_test" From="@_@THIS_CFG" Path="//_TableDefine/{@_@URL.table}/@AuthReadTest" Parse="on" Debug="..."/>
+        <ACTIONS Rem="SessionProcess" Test="{@_db_auth_test}!=null">
+        		<CALL Method="Session.Get" To="@_Session" Params="false"/>
+        		<RETURN Test="{@_Session}==null">__NOT_LOGIN__</RETURN>
+        		<SET  To="condition_1" type="append"> and '{@_db_auth_test}'</SET>
+        </ACTIONS>
+        <SET Test="{@_@URL.order}" To="@_order_by" Debug="...">order by {@_@URL.order}</SET>
+        <DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_result" Type="query" Trans="json" Total="@_total" Debug=".."><![CDATA[
+            select {@_@URL.col} from {@_EXIT? @_@URL.table : @_view_sql } where {condition} 
+        ]]></DO_SQL>
+        <DO_SQL Rem="GetTable" Db="Portal"  To="@_sql_result" Type="query" Trans="json" Debug=".."><![CDATA[
+            select {@_@URL.col} from {@_EXIT? @_@URL.table : @_view_sql } where {condition} {@_EXIT? @_order_by : } limit {@_start},{@_length}
+        ]]></DO_SQL>
+        <RETURN Type="json" Test="{@_@URL.ui_type}!=easyui"><![CDATA[{"db":"portal","total":"{@_total}","data":{@_sql_result} }]]></RETURN>
+        <RETURN Type="json" Test="{@_@URL.ui_type}==easyui"><![CDATA[{"db":"portal","page":"{@_@URL.page}","records":"{@_EXIT? @_@URL.records : '20' }","total":"{@_total}","rows":{@_sql_result}{@_group_result} }]]></RETURN>
+    </GetTableJson4>
+    <GetTableGroup Rem="取得JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+       <RETURN Type="html"  Test="!{@_@URL.group}"><![CDATA[Missing parameter &table=***&col=***,*** at query link!]]></RETURN>
+       <XPATH Test="{@_@URL.view}" To="@_view_sql" From="@_@THIS_CFG" Path="{@_@URL.view}" Debug="..."/>
+       <FOR In="@_@URL.group" To="@_rec_num" Rem="" Debug="....">
+        		<SET Type="append" To="@_json_result" Debug="..">"{#_.}":</SET>
+        		<DO_SQL Rem="GroupTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="array" Debug="..."><![CDATA[
+            		select COUNT(*) as num,{#_.} from {@_EXIT? @_@URL.table : @_view_sql } where {@_EXIT? @_@URL.condition : '1=1'} group by {#_.}
+        		]]></DO_SQL>
+	        <SET Test="!{@_#for_end}" Type="append" To="@_json_result" Debug="..">[{@_sql_result}],</SET>
+	        <SET Test="{@_#for_end}" Type="append" To="@_json_result" Debug="..">[{@_sql_result}]</SET>
+        </FOR> 
+        <PRINT To="Group.json"><![CDATA[{"db":"ecommerce","data":{{@_json_result}} }]]></PRINT>    
+        <RETURN Type="json" ><![CDATA[{"db":"ecommerce","data":{{@_json_result}} }]]></RETURN>
+    </GetTableGroup>
+    <GetTableJson Rem="取得表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table}"><![CDATA[Missing parameter &table=*** at query link!]]></RETURN>
+        <DO_SQL Test="!{@_@URL.col}" Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="json" Debug=".."><![CDATA[
+            select * from {@_@URL.table} where 1=1
+        ]]></DO_SQL>
+        <DO_SQL Test="{@_@URL.col}" Rem="GetTable" Db="ECommerce"  To="@_sql_result" Type="query" Trans="json" Debug=".."><![CDATA[
+            select {@_@URL.col} from {@_@URL.table} where 1=1
+        ]]></DO_SQL>
+        <RETURN Type="json"  Test="!{@_@URL.html}"><![CDATA[{"db":"ecommerce","sys_user_add":{@_sql_result} }]]></RETURN>
+        <RETURN Type="html"  Test="{@_@URL.html}"><![CDATA[{"db":"ecommerce","sys_user_add":{@_sql_result} }]]></RETURN>
+    </GetTableJson>
+    <DelTableJson Rem="删除JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table} || !{@_@URL.id}"><![CDATA[Missing parameter &table=***&id=*** at query link!]]></RETURN>
+        <XPATH Rem="Session" To="@_db_auth_field" From="@_@THIS_CFG" Path="//_TableDefine/{@_@URL.table}/@AuthField" Attrs="true" Debug="..."/>
+        <XPATH Rem="Session" To="@_db_auth_test" From="@_@THIS_CFG" Path="//_TableDefine/{@_@URL.table}/@AuthWriteTest" Parse="on" Debug="..."/>
+        <ACTIONS Rem="SessionProcess" Test="{@_db_auth_test}!=null">
+        		<CALL Method="GetSession" To="@_Session" Params="false"/>
+        		<RETURN Test="{@_Session}==null">__NOT_LOGIN__</RETURN>
+        		<DO_SQL Rem="GetTable" Db="ECommerce"  Type="query" Trans="json" Total="@_total" Debug=".."><![CDATA[
+	            select {@_db_auth_field} FROM  {@_@URL.table}  WHERE ({@_@URL.id_name}={@_@URL.id}) and ({@_db_auth_test})
+	        ]]></DO_SQL>
+        		<RETURN Test="{@_total}==0">Auth No delete right !</RETURN>
+        </ACTIONS>
+        <DO_SQL Rem="DelRecord" Db="ECommerce"  To="@_sql_return" Type="update" Debug=".."><![CDATA[
+            DELETE FROM  {@_@URL.table}  WHERE {@_@URL.id_name}={@_@URL.id}
+        ]]></DO_SQL>
+        <RETURN Type="html"><![CDATA[["success","{@_sql_return}"]]]></RETURN>
+    </DelTableJson>
+    <DelTableJsonExt Rem="删除JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table} || !{@_@URL.id}"><![CDATA[Missing parameter &table=***&id=*** at query link!]]></RETURN>
+        <DO_SQL Rem="DelRecord" Db="ECommerce"  To="@_sql_return" Type="update" Debug=".."><![CDATA[
+            DELETE FROM  {@_@URL.table}  WHERE {@_@URL.id_name}={@_@URL.id}
+        ]]></DO_SQL>
+        <PRINT>{@_@URL.ext_act}</PRINT>
+        <JPATH Test="{@_@URL.ext_act}" To="@_ext_dir" Path="$" Trans="map:#"><![CDATA[{@_@URL.ext_act}]]></JPATH>
+        <CALL Test="{@_ext_dir.0}" To="" Method="FileUtils.Delete" Debug="...">
+			<Src>{@_ext_dir.0.del}</Src>
+		</CALL>
+        <RETURN Type="html"><![CDATA[["success","{@_sql_return}"]]]></RETURN>
+    </DelTableJsonExt>
+    <SetTableJson Rem="写入JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table}"><![CDATA[["error","Missing parameter &table=***,at query link!"]]]></RETURN>
+        <SET To="@_id_name" Test="!{@_@URL.id_name}" Debug="...">ID</SET>
+        <SET To="@_id_name" Test="{@_@URL.id_name}" Debug="...">{@_@URL.id_name}</SET>
+        <JPATH To="@_set_records" From="@_@DATA_JSON" Path="$" Trans="list:sql_into_set:{@_id_name}"/>
+        <JPATH To="@_ids" Rem="New string" From="@_@DATA_JSON" Path="$.{@_id_name}" Trans="string"/>
+	    <XPATH Rem="Session" To="@_db_auth_field" From="@_@THIS_CFG" Path="//_TableDefine/{@_@URL.table}/@AuthField" Debug="..."/>
+        <XPATH Rem="Session" To="@_db_auth_test" From="@_@THIS_CFG" Path="//_TableDefine/{@_@URL.table}/@AuthWriteTest" Debug="..."/>
+        <ACTIONS Rem="SessionProcess" Test="{@_db_auth_test}!=null">
+        		<CALL Method="GetSession" To="@_Session" Params="false"/>
+        		<RETURN Test="{@_Session}==null">__NOT_LOGIN__</RETURN>
+        		<DO_SQL Rem="GetTable" Db="ECommerce" Type="query" Total="@_total1" Debug=".."><![CDATA[
+	            select {@_db_auth_field}  FROM  {@_@URL.table}  WHERE {@_@URL.id_name} in ({@_ids}) and not ({@_db_auth_test})
+	        ]]></DO_SQL>
+	        <RETURN Rem="如果Insert，则看是否有权限;" Test="{@_total1}!=0">Auth no insert right !</RETURN>     		
+        		<JPATH Path="$[{@_db_auth_field} != '{@_Session.customer_id}']" Type="string" Rem="如果Update，则看auth field 预先填写内容是否和seeion 中一致。" To="@_url_auth_check" From="@_@DATA_JSON"/>
+        		<RETURN Test="!{@_url_auth_check}">No update auth right(check set '{@_session_def.AuthField}' right)!</RETURN>
+        		<!-- <CALL Method="JSONObject.Put" Xpath="$.cusomter_id" Value="{@_Session.customer_id}"></CALL> -->
+        </ACTIONS>
+        <FOR In="@_set_records" To="@_rec_num" Rem="" Debug="....">
+	        <DO_SQL Test="{#_key}==" Db="ECommerce" Type="update"  To="@_last_ins_id" Params="return_keys" Debug="..."><![CDATA[
+	            INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values})
+	        ]]></DO_SQL>
+	        <DO_SQL Test="{#_key}!=" Db="ECommerce" Type="update"  To="@_last_ins_id" Params="return_keys" Debug="..."><![CDATA[
+	            INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values}) ON DUPLICATE KEY UPDATE {#_sets}
+	        ]]></DO_SQL>
+	        <SET Test="{#_key}!="  To="@_key_value" Debug="..">{#_key}</SET>
+        </FOR>
+        <SET Test="{@_last_ins_id}!=null"  To="@_key_value" Debug="..">{@_last_ins_id}</SET>
+        <RETURN Type="html"><![CDATA[["sql done","{@_key_value}"]]]></RETURN>
+    </SetTableJson>
+    <SetTableJsonExt Rem="写入JSON格式表格数据,以及关联目录" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table}"><![CDATA[["error","Missing parameter &table=***,at query link!"]]]></RETURN>
+        <SET To="@_id_name" Test="!{@_@URL.id_name}" Debug="...">ID</SET>
+        <SET To="@_id_name" Test="{@_@URL.id_name}" Debug="...">{@_@URL.id_name}</SET>
+        <JPATH To="@_set_records" From="@_@DATA_JSON" Path="$" Trans="list:sql_into_set:{@_id_name}"/>
+        <FOR In="@_set_records" To="@_rec_num" Rem="" Debug="....">
+        		<SET  Test="{#_key}==" Type="append" To="@_sql_action" Debug=".."><![CDATA[
+            		INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values}) 
+	        ]]></SET>
+	        <SET Test="{#_key}!=" Type="append" To="@_sql_action" Debug=".."><![CDATA[
+	            INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values}) ON DUPLICATE KEY UPDATE {#_sets}
+	        ]]></SET>
+	        <SET Test="{#_key}!="  To="@_key_value" Debug="..">{#_key}</SET>
+        </FOR>
+        <DO_SQL Db="ECommerce" Type="update" To="@_last_ins_id" Params="return_keys" Debug="..."><![CDATA[
+            {@_sql_action}
+        ]]></DO_SQL>
+        <SET Test="{@_last_ins_id}!=null" To="@_key_value" Debug="..">{@_last_ins_id}</SET>
+        <JPATH Test="{@_@URL.ext_act}" To="@_ext_dir" Path="$" Trans="map:#"><![CDATA[{@_@URL.ext_act}]]></JPATH>
+        <CALL Test="{@_ext_dir.0}" To="" Method="FileUtils.moveFileToDirectory" Debug="...">
+			<Src>{@_ext_dir.0.src}</Src>
+			<Dest>{@_ext_dir.0.dest}/{@_key_value}</Dest>
+			<Params>create_dir;del_empty_src</Params>
+		</CALL>
+        <RETURN Type="html"><![CDATA[["sql done","{@_key_value}"]]]></RETURN>
+    </SetTableJsonExt>
+    <SetTableJson_bak Rem="写入JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table}"><![CDATA[["error","Missing parameter &table=***,at query link!"]]]></RETURN>
+        <SET To="@_id_name" Test="!{@_@URL.id_name}" Debug="...">ID</SET>
+        <SET To="@_id_name" Test="{@_@URL.id_name}" Debug="...">{@_@URL.id_name}</SET>
+        <JPATH To="@_set_records" From="@_@DATA_JSON" Path="$" Trans="list:sql_into_set:{@_id_name}"/>
+        <FOR In="@_set_records" To="@_rec_num" Rem="" Debug="....">
+        		<SET  Test="{#_key}==" Type="append" To="@_sql_action" Debug=".."><![CDATA[
+            		INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values}) 
+	        ]]></SET>
+	        <SET Test="{#_key}!=" Type="append" To="@_sql_action" Debug=".."><![CDATA[
+	            INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values}) ON DUPLICATE KEY UPDATE {#_sets}
+	        ]]></SET>
+        </FOR>
+        <DO_SQL Db="ECommerce" Type="update" To="@_sql_return" Debug="..."><![CDATA[
+            {@_sql_action}
+        ]]></DO_SQL>
+        <RETURN Type="html"><![CDATA[["sql done","{@_sql_return}"]]]></RETURN>
+    </SetTableJson_bak>
+    <CreateTableJson Rem="写入JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table}"><![CDATA[["error","Missing parameter &table=***,at query link!"]]]></RETURN>
+        <JPATH To="@_set_records" From="@_@DATA_JSON" Path="$" Trans="list:sql_into_set:{@_@URL.id_name}"/>
+        <SET Test="{@_@URL.sql_param}" To="@_sql_action" Debug=".."><![CDATA[
+	         set @sql_param={@_@URL.sql_param}
+	    ]]></SET>
+        <FOR In="@_set_records" To="@_rec_num" Rem="" Debug="....">
+        		<SET  Test="{#_key}==" Type="append" To="@_sql_action" Debug=".."><![CDATA[
+            		INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values}) 
+	        ]]></SET>
+	        <SET Test="{#_key}!=" Type="append" To="@_sql_action" Debug=".."><![CDATA[
+	            INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values}) ON DUPLICATE KEY UPDATE {#_sets}
+	        ]]></SET>
+        </FOR>
+        <DO_SQL Db="ECommerce" Type="update" To="@_sql_return" Debug="..."><![CDATA[
+            {@_sql_action}
+        ]]></DO_SQL>
+        <RETURN Type="html"><![CDATA[["sql done","{@_sql_return}"]]]></RETURN>
+    </CreateTableJson>
+	<SetTableJsonArr Rem="写入JSON格式表格数据" Debug="Yes;" Clear="\n;\t"  AddParams="">
+        <RETURN Type="html"  Test="!{@_@URL.table} "><![CDATA[["error","Missing parameter &table=***, at query link!"]]]></RETURN>
+        <JPATH To="@_set_records" From="@_@DATA_JSON" Path="$" Trans="list:sql_into_set:ID"/>
+		<FOR In="@_set_records" To="@_rec_num" Rem="" Debug="....">
+			<SET To="@_sql_action" Type="append" Debug=""><![CDATA[
+				INSERT INTO {@_@URL.table} ({#_fields}) VALUES({#_values}) ON DUPLICATE KEY UPDATE {#_sets}
+			]]></SET>
+		</FOR>
+		<DO_SQL Db="ECommerce" Type="update" To="@_sql_return" Debug="..."><![CDATA[
+            {@_sql_action}
+        ]]></DO_SQL>
+        <RETURN Type="html"><![CDATA[["sql done","{@_sql_return}"]]]></RETURN>
+    </SetTableJsonArr>
+	<GetStudentGrade_Student Rem="取得学生成绩" Debug="Yes;" Clear="\n;\t"  AddParams="TermID;TermID1;TermID2;TermFirstDay">
+		<SET To="@_wx_user_id" Type="append" Debug="..">130-5448-7929</SET>
+		<CALL Test="!{@_@URL.snum}" Method="WxUtil.getTokenFromWx" To="@_token" Debug=".">
+			<Url><![CDATA[https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=ww16645e70d8606e3f&corpsecret=dwRLdBVqfd_Ua7u1toB_taf6XIlaGZjpzekYIyIHvdg]]></Url>
+		</CALL>
+		<CALL Test="!{@_@URL.snum}" Method="WxUtil.createGetMsg" To="@_user_id_json" Debug=".">
+			<Url><![CDATA[https://qyapi.weixin.qq.com/cgi-bin/user/getuserinfo?code={@_@URL.code}&access_token={@_token}]]></Url>
+		</CALL>
+		<JPATH Test="!{@_@URL.snum}" To="@_wx_user_id" From="@_user_id_json" Path="$.UserId" Debug="."/>
+		<DO_SQL Test="!{@_@URL.snum}" Rem="读取本地学生号-1" To="@_loc_stu" Type="query" Trans="list" Debug="..."><![CDATA[
+			select wxu.name as name,wxu.uid as uid,wxu.to_user_id as to_user_id,stu.s_num as snum
+			from sys_msg_user as wxu   
+			left join sys_user_add as stu on FIND_IN_SET(stu.s_id , wxu.sys_user_ids)
+			where to_user_id='{@_wx_user_id}'
+		]]></DO_SQL>
+		<DO_SQL Db="DBSchool" Test="{@_@URL.snum}" Rem="读取本地学生号-2" To="@_loc_stu" Type="query" Trans="list" Debug=".."><![CDATA[
+			select st.STUDENT_NUMBER as "snum" from students st where st.STUDENT_NUMBER={@_@URL.snum}
+		]]></DO_SQL>
+		<SET To="@_xml_part"></SET>
+		<SET To="@_xml_student" Type="append"></SET>
+		<FOR In="@_loc_stu" To="@_rec_num"  Rem="Orical->local同步内容">
+			<SET To="@_xml_part" Type="append"></SET>
+			<DO_SQL Rem="StudentInfo" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[ 
+				select st.STUDENT_NUMBER as SNUM, st.house as HOURSE, st.LASTFIRST as SNAME from students st where st.STUDENT_NUMBER= {#_snum}
+			]]></DO_SQL>
+			<SET To="@_xml_part" Type="append"><![CDATA[<StudentInfo>{@_sql_result}</StudentInfo>]]></SET>
+			<DO_SQL Rem="SumAllGrade" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[ 
+				SELECT  STUDENTS.GRADE_LEVEL,
+                    STUDENTS.LASTFIRST,
+                    CC.COURSE_NUMBER,
+                    CC.SECTIONID,
+                    PGFINALGRADES.grade,
+                    COURSES.COURSE_NAME,
+                    STUDENTS.ID,
+                    t.LASTFIRST teachername,
+                    t.EMAIL_ADDR teacheremail
+			      FROM STUDENTS 
+			      inner join cc on  students.id=cc.STUDENTID and cc.SECTIONID>0 AND CC.TERMID  in( '{@_@TermID}','{@_@TermID1}','{@_@TermID2}')
+			      inner join courses on COURSES.COURSE_NUMBER = CC.COURSE_NUMBER 
+			      inner join teachers t on t.id=cc.TEACHERID
+			      left outer join PGFINALGRADES on PGFINALGRADES.STUDENTID = STUDENTS.ID and PGFINALGRADES.SECTIONID=cc.SECTIONID and PGFINALGRADES.FINALGRADENAME = 'Y1'     
+			      where STUDENTS.STUDENT_NUMBER = {#_snum}
+			]]></DO_SQL>
+			<SET To="@_xml_part" Type="append"><![CDATA[<SumAllGrade>{@_sql_result}</SumAllGrade>]]></SET>
+			<DO_SQL Rem="Counselor and advisor!!!{#_snum}" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug="..."><![CDATA[ 
+				select STUDENT_NUMBER,ADV_NUMBER,counselor,
+					case when Counselor='Kendra Allen'  
+						then '109282' 
+						when Counselor='Libby Kennedy' 
+						then '109275' 
+						when Counselor='Kathleen Brophy' 
+						then '109378' 
+						when Counselor='Anthony Mastreani' 
+						then '109382' 
+						when Counselor='Avita Jones' 
+						then '109428' 
+						end as CONSELOR_NUMBER,
+					lower(substr(counselor, 1, 1)||SUBSTR(counselor,INSTR(counselor,' ')+1,20))||'@ncpachina.org' counselor_email,advisors,advisor_email 
+				from (
+				SELECT s.STUDENT_NUMBER,s.last_name,
+				      ps_customfields.getcf('students', s.ID, 'counselor') counselor,
+				      adv.lastfirst   advisors,
+				      adv.EMAIL_ADDR advisor_email,
+				      adv.teacher_number adv_number
+				    FROM STUDENTS s left outer join 
+				    (select 
+				    students.student_number,
+				    teachers.lastfirst,
+				    teachers.EMAIL_ADDR,
+				    teachers.TEACHERNUMBER as teacher_number
+				    from cc
+				    inner join teachers on cc.teacherid=teachers.DCID
+				    inner join students on cc.studentid=students.ID
+				    inner join sections on cc.sectionid=sections.id
+				    
+				    where  cc.termid={@_@TermID} and cc.COURSE_NUMBER like '%ADV' and students.ENROLL_STATUS=0 and cc.SECTIONID>0
+				    ) adv on adv.student_number=s.student_number
+				    WHERE S.ENROLL_STATUS = 0  and S.STUDENT_NUMBER= {#_snum})
+			]]></DO_SQL>
+			<SET To="@_xml_part" Type="append" Debug=""><![CDATA[<Counselor_Advisor>{@_sql_result}</Counselor_Advisor>]]></SET>
+			<DO_SQL Rem="StandGrade" Db="DBSchool" To="@_sql_result" Type="query" Trans="list" Debug=".."><![CDATA[ 
+				select STANDARDGRADE,COURSE_NAME,standardidentifier,SECTIONID,STORECODE from(SELECT STANDARDGRADESECTION.STANDARDGRADE AS STANDARDGRADE,
+                     STUDENTS.LASTFIRST AS LASTFIRST,
+                     COURSES.COURSE_NAME AS COURSE_NAME,
+										 COURSES.COURSE_NUMBER AS COURSE_NUMBER,
+                     STUDENTS.STUDENT_NUMBER AS STUDENT_NUMBER,
+                     STUDENTS.ID AS STUDENTID,
+                     STANDARD.IDENTIFIER AS standardidentifier,
+                     STANDARDGRADESECTION.STORECODE AS STORECODE,
+                     cc.sectionid,
+                     STANDARD.NAME AS NAME,
+                     STANDARDGRADESECTION.YEARID,
+                     standardgradesection.lastupdated
+                		FROM STANDARDGRADESECTION
+										 INNER JOIN (SELECT  STUDENTS.GRADE_LEVEL,
+																				STUDENTS.LASTFIRST,
+																				CC.COURSE_NUMBER,
+																				CC.SECTIONID,
+																				PGFINALGRADES.GRADE,
+																				COURSES.COURSE_NAME,
+																				STUDENTS.ID,
+																				t.LASTFIRST teachername,
+																				t.EMAIL_ADDR teacheremail
+													FROM STUDENTS inner join PGFINALGRADES on PGFINALGRADES.STUDENTID = STUDENTS.ID and PGFINALGRADES.FINALGRADENAME = 'Y1'
+													inner join cc on PGFINALGRADES.SECTIONID = CC.SECTIONID and CC.STUDENTID=PGFINALGRADES.STUDENTID AND cc.SECTIONID>0 AND CC.TERMID  in( '{@_@TermID}','{@_@TermID1}','{@_@TermID2}')
+													inner join courses on COURSES.COURSE_NUMBER = CC.COURSE_NUMBER 
+													inner join teachers t on t.id=cc.TEACHERID
+													where STUDENTS.STUDENT_NUMBER = {#_snum})
+                        ON STANDARDGRADESECTION.SECTIONSDCID = SECTIONID
+                     INNER JOIN sections
+                        ON STANDARDGRADESECTION.SECTIONSDCID = SECTIONS.DCID
+                     INNER JOIN courses
+                        ON sections.course_number = courses.course_number
+                     INNER JOIN students
+                        ON standardgradesection.studentsdcid = students.dcid
+                     Inner JOIN cc
+                       ON cc.studentid = students.id and cc.sectionid=sections.id and cc.sectionid>0
+                     INNER JOIN STANDARD
+                        ON     STANDARD.standardid = standardgradesection.standardid
+                           AND STANDARDGRADESECTION.STORECODE = 'Y1'
+                  -- WHERE STUDENT_NUMBER =  AND standardgrade IS NOT NULL
+            		WHERE STUDENT_number ={#_snum}   AND standardgrade IS NOT NULL
+ 				ORDER BY lastfirst, course_name, standardidentifier)
+			]]></DO_SQL>
+			<CALL Method="GetherGridXml" To="@_sql_group" Debug=".">
+				<Grid>@_sql_result</Grid>
+				<GroupColumns>COURSE_NAME;STANDARDIDENTIFIER</GroupColumns>
+				<AddColumns>SECTIONID;STORECODE</AddColumns>
+				<AddColumnsAttr>true</AddColumnsAttr>
+				<CntColumn>STANDARDGRADE</CntColumn>
+				<CntMethod>Append</CntMethod>
+			</CALL>
+			<PRINT To="tmp2.xml"><![CDATA[<StandGrade>{@_sql_group}</StandGrade>]]></PRINT>
+			<SET To="@_xml_part" Type="append" Debug=""><![CDATA[<StandGrade>{@_sql_group}</StandGrade>]]></SET>
+			<DO_SQL Rem="ATTENDANCE" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[ 
+				SELECT att.STUDENTid as studentid,
+				att.PERIOD_ABBREVIATION,
+				co.COURSE_NAME,
+				att.att_date,
+				att.att_code,
+				st.STUDENT_NUMBER as student_num
+				
+				FROM
+				PS_ATTENDANCE_meeting att join sections se on se.id=att.SECTIONID
+				join courses co on co.COURSE_NUMBER=se.COURSE_NUMBER join students st on att.STUDENTid=st.id
+				WHERE
+				st.STUDENT_NUMBER={#_snum} and (att_code='A' or att_code='T') and att.att_date>='{@_@TermFirstDay}'
+			]]></DO_SQL>
+			<SET To="@_xml_part" Type="append" Debug=""><![CDATA[<Attendance>{@_sql_result}</Attendance>]]></SET>
+			<SET To="@_xml_student" Type="append" Debug=""><![CDATA[<Student Num="{#_snum}">{@_xml_part}</Student>]]></SET>
+			<SET To="@_xml_part" Debug=""></SET>
+		</FOR>
+		<RETURN Test="{@_rec_num}==0">你没有关联的学生，在英东!</RETURN>
+		<PRINT To="tmp.xml"><![CDATA[<?xml version="1.0" encoding="utf-8"?><Students Num=""  Show="{@_@URL.show}">{@_xml_student}</Students>]]></PRINT>
+		<XSLT To="@_result_html" Path="student_grade_student4.xsl"><![CDATA[<?xml version="1.0" encoding="utf-8"?><Students Num="" Show="{@_@URL.show}">{@_xml_student}</Students>]]></XSLT>
+		<RETURN Type="html"><![CDATA[  {@_result_html}  ]]></RETURN>
+	</GetStudentGrade_Student>
+	<GetStudentGrade_Course Rem="取得学生成绩" Debug="Yes;." Clear="\n;\t"  AddParams="TermID;TermID1;TermID2;TermFirstDay">
+		<SET To="@_xml_part"></SET>
+		<SET To="@_xml_course" Type="append"></SET>
+			<!-- <DO_SQL Rem="StudentInfo" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[ 
+				select st.STUDENT_NUMBER as SNUM, st.LASTFIRST as SNAME from students st where st.STUDENT_NUMBER= {@_@URL.snum}
+			]]></DO_SQL> -->
+			<DO_SQL Rem="StudentInfo" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[ 
+				select 
+					st.STUDENT_NUMBER as SNUM, 
+					st.LASTFIRST as SNAME ,
+					CC.COURSE_NUMBER,
+                		CC.SECTIONID,
+                    	COURSES.COURSE_NAME,
+                    	st.ID,
+                    	t.LASTFIRST teachername,
+                    	t.EMAIL_ADDR teacheremail,
+                    	t.teachernumber
+				from students st 
+				inner join cc on  st.id=cc.STUDENTID and cc.SECTIONID>0 AND CC.TERMID  in( '2900','2901','2902')
+      			inner join courses on COURSES.COURSE_NUMBER = CC.COURSE_NUMBER 
+      			inner join teachers t on t.id=cc.TEACHERID
+      			where st.STUDENT_NUMBER = {@_@URL.snum} and cc.SECTIONID={@_@URL.secid}
+			]]></DO_SQL>
+			<SET To="@_xml_part" Type="append"><![CDATA[<StudentInfo>{@_sql_result}</StudentInfo>]]></SET>
+			<DO_SQL Rem="SumAllGrade" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[ 
+				SELECT  STUDENTS.GRADE_LEVEL,
+								CC.SECTIONID,
+								STUDENTS.STUDENT_NUMBER,
+				                STUDENTS.LASTFIRST,
+				                CC.COURSE_NUMBER,
+				                PGFINALGRADES.GRADE,
+				                COURSES.COURSE_NAME,
+				                STUDENTS.ID,
+				                t.LASTFIRST teachername,
+				                t.EMAIL_ADDR teacheremail,
+				                t.teachernumber
+				  FROM STUDENTS inner join PGFINALGRADES on PGFINALGRADES.STUDENTID = STUDENTS.ID and PGFINALGRADES.FINALGRADENAME = 'Y1'
+				  inner join cc on PGFINALGRADES.SECTIONID = CC.SECTIONID and CC.STUDENTID=PGFINALGRADES.STUDENTID AND cc.SECTIONID>0 AND CC.TERMID  in( '{@_@TermID}','{@_@TermID1}','{@_@TermID2}')
+				  inner join courses on COURSES.COURSE_NUMBER = CC.COURSE_NUMBER 
+				  inner join teachers t on t.id=cc.TEACHERID
+				  where STUDENTS.STUDENT_NUMBER = {@_@URL.snum} and CC.SECTIONID={@_@URL.secid}
+			]]></DO_SQL>
+			<SET To="@_xml_part" Type="append"><![CDATA[<SumAllGrade>{@_sql_result}</SumAllGrade>]]></SET>
+			<DO_SQL Rem="Counselor and advisor" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug="..."><![CDATA[ 
+				SELECT adv.STUDENT_NUMBER,s.last_name,
+				  ps_customfields.getcf('students', s.ID, 'counselor') counselor,
+				  adv.lastfirst   advisors,
+				  adv.EMAIL_ADDR advisor_email
+				FROM STUDENTS s join 
+				(select 
+				students.student_number,
+				teachers.lastfirst,
+				teachers.EMAIL_ADDR
+				from cc
+				inner join teachers on cc.teacherid=teachers.DCID
+				inner join students on cc.studentid=students.ID
+				inner join sections on cc.sectionid=sections.id
+				
+				where  cc.termid={@_@TermID} and cc.COURSE_NUMBER like '%ADV' and students.ENROLL_STATUS=0 and cc.SECTIONID>0
+				) adv on adv.student_number=s.student_number
+				WHERE S.ENROLL_STATUS = 0  and S.STUDENT_NUMBER= {@_@URL.snum}
+			]]></DO_SQL>
+			<SET To="@_xml_part" Type="append" Debug=""><![CDATA[<Counselor_Advisor>{@_sql_result}</Counselor_Advisor>]]></SET>
+			<DO_SQL Rem="ATTENDANCE" Db="DBSchool" To="@_sql_result" Type="query" Trans="list" Debug=".."><![CDATA[ 
+				SELECT att.STUDENTid as studentid,
+				att.PERIOD_ABBREVIATION,
+				co.COURSE_NAME,
+				att.att_date,
+				att.att_code,
+				att.SECTIONID,
+				st.STUDENT_NUMBER as student_num
+				
+				FROM
+				PS_ATTENDANCE_meeting att join sections se on se.id=att.SECTIONID
+				join courses co on co.COURSE_NUMBER=se.COURSE_NUMBER join students st on att.STUDENTid=st.id
+				WHERE
+				st.STUDENT_NUMBER={@_@URL.snum} and att.SECTIONID={@_@URL.secid} and (att_code='A' or att_code='T') and att.att_date>='{@_@TermFirstDay}'
+				order by att.att_code,att.att_date
+			]]></DO_SQL>
+			<CALL Method="GetherGridXml" To="@_sql_group" Debug=".">
+				<Grid>@_sql_result</Grid>
+				<GroupColumns>SECTIONID;ATT_CODE</GroupColumns>
+				<AddColumns>ATT_DATE;PERIOD_ABBREVIATION;COURSE_NAME;STUDENT_NUM;SECTIONID</AddColumns>
+				<AddColumnsAttr>true</AddColumnsAttr>
+				<CntColumn>PERIOD_ABBREVIATION</CntColumn>
+				<CntMethod>Append</CntMethod>
+			</CALL>
+			<SET To="@_xml_part" Type="append" Debug=""><![CDATA[<Attendance>{@_sql_group}</Attendance>]]></SET>
+			<DO_SQL Rem="StandGradeStudent" Db="DBSchool" To="@_sql_result" Type="query" Trans="xml" Debug=".."><![CDATA[ 
+					select STANDARDGRADE,COURSE_NAME,standardidentifier,SECTIONID,STORECODE from(SELECT STANDARDGRADESECTION.STANDARDGRADE AS STANDARDGRADE,
+                     STUDENTS.LASTFIRST AS LASTFIRST,
+                     COURSES.COURSE_NAME AS COURSE_NAME,
+                     STUDENTS.STUDENT_NUMBER AS STUDENT_NUMBER,
+                     STUDENTS.ID AS STUDENTID,
+                     STANDARD.IDENTIFIER AS standardidentifier,
+                     STANDARDGRADESECTION.STORECODE AS STORECODE,
+                     cc.sectionid,
+                     STANDARD.NAME AS NAME,
+                     STANDARDGRADESECTION.YEARID,
+                     standardgradesection.lastupdated
+                FROM STANDARDGRADESECTION
+                     INNER JOIN sections
+                        ON STANDARDGRADESECTION.SECTIONSDCID = SECTIONS.DCID
+                     INNER JOIN courses
+                        ON sections.course_number = courses.course_number
+                     INNER JOIN students
+                        ON standardgradesection.studentsdcid = students.dcid
+                     Inner JOIN cc
+                       ON cc.studentid = students.id and cc.sectionid=sections.id and cc.sectionid>0
+                     INNER JOIN STANDARD
+                        ON     STANDARD.standardid = standardgradesection.standardid
+                           AND STANDARDGRADESECTION.STORECODE = 'Y1'
+                  -- WHERE STUDENT_NUMBER =  AND standardgrade IS NOT NULL   and cc.sectionid={@_@URL.secid}
+            		WHERE STUDENT_number ={@_@URL.snum}   AND standardgrade IS NOT NULL
+ 				ORDER BY lastfirst, course_name, standardidentifier)			
+			]]></DO_SQL>
+			<SET To="@_xml_part" Type="append" Debug=""><![CDATA[<StandGradeStudent>{@_sql_result}</StandGradeStudent>]]></SET>
+			<DO_SQL Rem="StandGrade" Db="DBSchool" To="@_sql_result" Type="query" Trans="list" Debug=".."><![CDATA[ 
+				select  students.STUDENT_NUMBER,students.id, standard.IDENTIFIER, sections.COURSE_NUMBER, sections.id as section,standard.name as StandardName, assignmentsection.name as AssignmentName, assignmentsection.duedate as assignmentdate, standardscore.SCORELETTERGRADE, standardscore.scorepercent as scorepercent, row_number() over (partition by standard.name order by assignmentsection.duedate desc) as position 
+				from standardscore
+				inner join students on standardscore.studentsdcid=students.dcid
+				inner join assignmentsection on assignmentsection.assignmentsectionid=standardscore.assignmentsectionid
+				inner join AssignmentStandardAssoc on AssignmentStandardAssoc.AssignmentStandardAssocID=standardscore.AssignmentStandardAssocID
+				inner join standard on AssignmentStandardAssoc.standardid = standard.standardid
+				inner join sections on sections.dcid=assignmentsection.sectionsdcid
+				INNER JOIN assignmentcategoryassoc
+				ON assignmentcategoryassoc.ASSIGNMENTSECTIONID = assignmentsection.ASSIGNMENTsectionID
+				inner JOIN teachercategory
+				ON teachercategory.teachercategoryid = assignmentcategoryassoc.TEACHERCATEGORYID
+				INNER JOIN districtTEACHERCATEGORY
+				ON districtTEACHERCATEGORY.districtteachercategoryid = teachercategory.districtteachercategoryid
+				where students.STUDENT_NUMBER= {@_@URL.snum} and districtteachercategory.name = 'Assessment'
+				and sections.id='{@_@URL.secid}'
+				order by course_number, standardname, assignmentdate desc
+			]]></DO_SQL>
+			<CALL Method="GetherGridXml" To="@_sql_group" Debug=".">
+				<Grid>@_sql_result</Grid>
+				<GroupColumns>STANDARDNAME;ASSIGNMENTNAME</GroupColumns>
+				<AddColumns>ASSIGNMENTDATE;SCOREPERCENT;COURSE_NUMBER;SCORELETTERGRADE;IDENTIFIER</AddColumns>
+				<AddColumnsAttr>true</AddColumnsAttr>
+				<CntColumn>SCORELETTERGRADE</CntColumn>
+				<CntMethod>Append</CntMethod>
+			</CALL>
+			<SET To="@_xml_part" Type="append" Debug=""><![CDATA[<StandGrade>{@_sql_group}</StandGrade>]]></SET>
+			<!--<DO_SQL Rem="ASSIGNMENTNAME" Db="DBSchool" To="@_sql_result" Type="query" Trans="list" Debug=".."><![CDATA[ 
+				select  students.STUDENT_NUMBER,students.id, sections.COURSE_NUMBER, sections.id as section,standard.name as StandardName, assignmentsection.name as AssignmentName, assignmentsection.duedate as assignmentdate, standardscore.SCORELETTERGRADE, standardscore.scorepercent as scorepercent, row_number() over (partition by standard.name order by assignmentsection.duedate desc) as position 
+				from standardscore
+				inner join students on standardscore.studentsdcid=students.dcid
+				inner join assignmentsection on assignmentsection.assignmentsectionid=standardscore.assignmentsectionid
+				inner join AssignmentStandardAssoc on AssignmentStandardAssoc.AssignmentStandardAssocID=standardscore.AssignmentStandardAssocID
+				inner join standard on AssignmentStandardAssoc.standardid = standard.standardid
+				inner join sections on sections.dcid=assignmentsection.sectionsdcid
+				INNER JOIN assignmentcategoryassoc
+				ON assignmentcategoryassoc.ASSIGNMENTSECTIONID = assignmentsection.ASSIGNMENTsectionID
+				inner JOIN teachercategory
+				ON teachercategory.teachercategoryid = assignmentcategoryassoc.TEACHERCATEGORYID
+				INNER JOIN districtTEACHERCATEGORY
+				ON districtTEACHERCATEGORY.districtteachercategoryid = teachercategory.districtteachercategoryid
+				where students.STUDENT_NUMBER= {@_@URL.snum} and districtteachercategory.name = 'Assessment'
+				and sections.id='{@_@URL.secid}'
+				order by course_number, assignmentdate, standardname desc
+			]]></DO_SQL> -->
+			<DO_SQL Rem="ASSIGNMENTNAME" Db="DBSchool" To="@_sql_result" Type="query" Trans="list" Debug=".."><![CDATA[ 
+				select  students.STUDENT_NUMBER,students.id, sections.COURSE_NUMBER, sections.id as section,assignmentsection.name as AssignmentName,standard.name as StandardName,  assignmentsection.duedate as assignmentdate, standardscore.SCORELETTERGRADE,
+				case when assignmentscore.ISINCOMPLETE=1 then '未完成' when assignmentscore.iscollected=1 then '完成' when assignmentscore.ISLATE=1 then '迟交' end as icon,case when districtteachercategory.name='Assessment' then 1 else 2 end as assignmenttype
+				    from assignmentscore
+				    inner join students on assignmentscore.studentsdcid=students.dcid
+				    inner join assignmentsection on assignmentsection.assignmentsectionid=assignmentscore.assignmentsectionid
+				    join assignment on  assignmentsection.ASSIGNMENTID = assignment.ASSIGNMENTID
+				    left outer join standardscore on  standardscore.studentsdcid=students.dcid and assignmentsection.assignmentsectionid=standardscore.assignmentsectionid
+				    left outer join AssignmentStandardAssoc on AssignmentStandardAssoc.AssignmentStandardAssocID=standardscore.AssignmentStandardAssocID
+				    left outer join standard on AssignmentStandardAssoc.standardid = standard.standardid
+				    inner join sections on sections.dcid=assignmentsection.sectionsdcid
+				    INNER JOIN assignmentcategoryassoc
+				    ON assignmentcategoryassoc.ASSIGNMENTSECTIONID = assignmentsection.ASSIGNMENTsectionID
+				    inner JOIN teachercategory
+				    ON teachercategory.teachercategoryid = assignmentcategoryassoc.TEACHERCATEGORYID
+				    INNER JOIN districtTEACHERCATEGORY
+				    ON districtTEACHERCATEGORY.districtteachercategoryid = teachercategory.districtteachercategoryid
+				    where students.STUDENT_NUMBER={@_@URL.snum}
+				       and sections.id='{@_@URL.secid}'
+				    order by course_number, assignmentdate, standardname desc
+			]]></DO_SQL>
+			<CALL Method="GetherGridXml" To="@_sql_group" Debug=".">
+				<Grid>@_sql_result</Grid>
+				<GroupColumns>ASSIGNMENTNAME;STANDARDNAME</GroupColumns>
+				<AddColumns>ASSIGNMENTDATE;SCOREPERCENT;ICON;ASSIGNMENTTYPE;COURSE_NUMBER</AddColumns>
+				<AddColumnsAttr>true</AddColumnsAttr>
+				<CntColumn>SCORELETTERGRADE</CntColumn>
+				<CntMethod>Append</CntMethod>
+			</CALL>
+			<SET To="@_xml_part" Type="append" Debug=""><![CDATA[<ASSIGNMENT>{@_sql_group}</ASSIGNMENT>]]></SET>
+			<SET To="@_xml_course" Type="append" Debug=""><![CDATA[<Course StudentNum="{@_@URL.snum}" CourseName="{@_@URL.cname}" SectionId="@_@URL.secid">{@_xml_part}</Course>]]></SET>
+		<PRINT To="tmp.xml"><![CDATA[<?xml version="1.0" encoding="utf-8"?>{@_xml_course}]]></PRINT>
+		<XSLT To="@_result_html" Path="student_grade_course3.xsl"><![CDATA[<?xml version="1.0" encoding="utf-8"?>{@_xml_course}]]></XSLT>
+		<RETURN Type="html"><![CDATA[  {@_result_html}  ]]></RETURN>
+	</GetStudentGrade_Course>
+	<MsgModelReview Rem="url:预览Model列表" Debug="Yes;." Clear="\n;\t;\r\n">
+		<DO_SQL Rem="读取模板配置表" To="@_loc_model_result" Type="query" Trans="map:#" Debug=".."><![CDATA[
+			select sm.model_name as name,sm.msg as sql_content,sm.content as json_content,sm.to_user_ids as sql_id  from sys_msg_model as sm where id='{@_@URL.id}'
+		]]></DO_SQL>
+		<RETURN Test="{@_loc_model_result}==null"><![CDATA[<DO_SQL>get config db  record error!"]]></RETURN>
+		<DO_SQL Db="DBSchool" Rem="运作配置好的模板,只读取一条记录" To="@_model_sql_result" Type="query" Trans="list" Debug="..."><![CDATA[{@_loc_model_result.0.sql_content}]]></DO_SQL>
+		<FOR In="@_model_sql_result" To="@_rec_num" Debug="Yes">
+			<SET  Rem="生成json;可以多次解析{#_***}!!!差错分析" To="@_loc_model_result_part" Debug="."  ParseValue2="true"><![CDATA[
+				{@_loc_model_result.0.json_content}
+			]]></SET>
+			<SET To="@_json_stu_part" Type="append" Debug=".." ParseValue2="true"><![CDATA[
+				<row><title>{@_loc_model_result.0.name}_{@_#for_num}</title><msg>{@_loc_model_result_part}</msg><id>{@_loc_model_result.0.sql_id}</id></row>
+			]]></SET>
+		</FOR>
+		<XSLT To="@_result_html" Path="msg_model_review.xsl"><![CDATA[<?xml version="1.0" encoding="utf-8"?><msg_review>{@_json_stu_part}</msg_review>]]></XSLT>
+		<RETURN  Type="html"><![CDATA[{@_result_html}]]></RETURN>
+	</MsgModelReview>
+	<GetAllTableCreator>
+		<SET To="@_xml_sql_all" Type="append" Debug="" ><![CDATA[<Table name="test">{@_sql_result}</Table>]]></SET>
+		<XSLT To="@_result" Path="DBCfg.xsl" From="DBCfg.xml"/>
+		<RETURN Type="html"><![CDATA[  {@_result}  ]]></RETURN>
+	</GetAllTableCreator>
+	<GetUIConfig Debug="Yes;" >
+		<XPATH To="@_ui_cfg_sets" From="@_@THIS_CFG" Path="{@_@URL.xpath}" Trans=""  Debug="..."/>
+		<RETURN Type="html"><![CDATA[  {@_ui_cfg_sets}  ]]></RETURN>
+	</GetUIConfig>
+	<GetDBTree_Test Debug="Yes;" >
+		<SET To="@_json_root_part"><![CDATA[ 
+		{"name":"root", "icon":"/Portal/res/image/folder.ico","pId":"-1","id":"0","open":true}
+		]]></SET>
+		<DO_SQL  Db="ECommerce" Rem="读取本地学生信息" To="@_loc_cat" Type="query" Rem2="应该为list不用SET" Trans="map:category_id" Debug="..."><![CDATA[select * from {@_@URL.table} where 1=1]]></DO_SQL>
+		<FOR In="@_loc_cat" To="@_rec_num" Rem="读取学生列表">
+			<SET To="@_json_cat_part" Type="append" Debug=".."><![CDATA[ 
+				,{"name":"{#_category_name}","icon":"/Portal/res/image/user.ico","checked":"false","pId":"{#_parent_id}","id":"{#_category_id}","open":"true"}
+			]]></SET>
+		</FOR>
+		<CALL Method="zTreeToEasyTree.DoTrans" To="@_easytree" Debug="...">
+			<Src>[{@_json_root_part}{@_json_cat_part}]</Src>
+		</CALL>
+		<PRINT To="TreeDB.json">{@_easytree}</PRINT>
+		<RETURN Type="html">{@_easytree}</RETURN>
+	</GetDBTree_Test>
+	<GetDBTree Debug="Yes;" >
+		<RETURN Type="html"  Test="!{@_@URL.table} &amp;&amp; !{@_@URL.view}"><![CDATA[Missing parameter &table or & view=*** at query link!]]></RETURN>
+        <XPATH Test="{@_@URL.view}" To="@_view_sql" From="@_@THIS_CFG" Path="{@_@URL.view}" Debug="..."/>
+		<DO_SQL  Db="ECommerce" Rem="读取本地学生信息" To="@_loc_category" Type="query" Trans="json" Debug=".."><![CDATA[select * from  {@_EXIT? @_@URL.table : @_view_sql } where 1=1]]></DO_SQL>
+		<CALL Method="zTreeToEasyTree.DoTrans" To="@_easytree" Debug="">
+			<Src>{@_loc_category}</Src>
+			<Param Rem="id_field,text_field,pid_field,pid_root_value,start_open,check">{@_@URL.trans}</Param>
+		</CALL>
+		<PRINT To="TreeDB.json">{@_easytree}</PRINT>
+		<RETURN Type="html">{@_easytree}</RETURN>
+	</GetDBTree>
+	<DB_TableCreator Debug="Yes;" >
+		<RETURN Type="html"  Test="!{@_@URL.xpath}"><![CDATA[Missing parameter &xpath=*** at table create!]]></RETURN>
+        <XPATH To="@_db_sql_sets" From="@_@THIS_CFG" Path="{@_@URL.xpath}" Trans="list"  Debug="..."/>
+		<FOR In="@_db_sql_sets" To="@_rec_num" Rem="" Debug="....">
+	        <PRINT>{#_.}</PRINT>
+	        <SET To="@_sql_action" Type="append" Debug=""><![CDATA[
+				{#_.}
+			]]></SET>
+		</FOR>
+		<RETURN Type="html" Test="{@_rec_num}==0"><![CDATA[Missing parameter &xpath=*** not exited!]]></RETURN>
+		<DO_SQL Db="ECommerce" Type="update" To="@_sql_return" Debug="..."><![CDATA[
+            {@_sql_action}
+        ]]></DO_SQL>
+        <RETURN Type="html"><![CDATA[["sql done","{@_sql_return}"]]]></RETURN>
+	</DB_TableCreator>
+	<_ViewDefine>
+		<ProductCatAll>(Select * from product_category ) as product_cat_view</ProductCatAll>
+		<ProductInfoAll>(Select b.category_name as category, a.* from product_info as a left join product_category as b on a.one_category_id=b.category_id ) as product_info_view</ProductInfoAll>
+		<CountryView>(select id,parentid,CONCAT(IFNULL(country,''),IFNULL(state,''),IFNULL(city,''),IFNULL(region,'')) as text from tbl_country order by id) as country_view</CountryView>
+		<PortalObjView>(SELECT a.*,b.id AS site_pid FROM sys_obj AS a JOIN sys_site AS b ON a.site_id=b.id) as d</PortalObjView>
+	</_ViewDefine>
+	<_DBSessionDef>
+		<User AuthField="customer_id" SessionAuthValue="{@_Session.customer_id}"/>
+	</_DBSessionDef>
+	<_TableDefine>
+		<Customer>
+			<Login AuthField="customer_id" AuthReadTest="customer_id=='{@_Session.customer_id}'" AuthWriteTest="customer_id=='{@_Session.customer_id}'"><![CDATA[
+	            CREATE TABLE customer_login(
+				  customer_id INT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '用户ID',
+				  login_name VARCHAR(20) NOT NULL COMMENT '用户登录名',
+				  password CHAR(32) NOT NULL COMMENT 'md5加密的密码',
+				  mobile VARCHAR(18) NOT NULL DEFAULT '' COMMENT '手机号',
+				  email VARCHAR(50) COMMENT '邮箱',
+				  comment VARCHAR(100) COMMENT '备注',
+				  user_stats TINYINT NOT NULL DEFAULT 1 COMMENT '用户状态',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_customerid(customer_id)
+				) ENGINE = innodb COMMENT '用户登录表' DEFAULT CHARSET=utf8;
+        		]]></Login>
+        		<Inf><![CDATA[
+	            CREATE TABLE customer_inf(
+				  customer_inf_id INT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '自增主键ID',
+				  customer_id INT UNSIGNED NOT NULL COMMENT 'customer_login表的自增ID',
+				  customer_name VARCHAR(20) NOT NULL COMMENT '用户全称姓名',
+				  first_name VARCHAR(20) NOT NULL COMMENT '用户姓',
+				  last_name VARCHAR(20) NOT NULL COMMENT '用户名',
+				  mobile VARCHAR(18) NOT NULL DEFAULT '' COMMENT '手机号',
+				  email VARCHAR(50) COMMENT '邮箱',
+				  social_accounts VARCHAR(128)  NOT NULL DEFAULT '' COMMENT '社交账号',
+				  identity_card_type TINYINT NOT NULL DEFAULT 1 COMMENT '证件类型：1 身份证，2 军官证，3 护照',
+				  identity_card_no VARCHAR(20) NOT NULL DEFAULT '' COMMENT '证件号码',
+				  gender CHAR(1) COMMENT '性别',
+				  user_point INT NOT NULL DEFAULT 0 COMMENT '用户积分',
+				  register_time TIMESTAMP NOT NULL COMMENT '注册时间',
+				  birthday DATETIME COMMENT '会员生日',
+				  customer_level TINYINT NOT NULL DEFAULT 1 COMMENT '会员级别：1 普通会员，2 青铜，3白银，4黄金，5钻石',
+				  user_money DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '用户余额',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_customerinfid(customer_inf_id)
+				) ENGINE = innodb COMMENT '用户信息表' DEFAULT CHARSET=utf8;
+        		]]></Inf>
+        		<LevelInf><![CDATA[
+	            CREATE TABLE customer_level_inf(
+				  customer_level TINYINT NOT NULL AUTO_INCREMENT COMMENT '会员级别ID',
+				  level_name VARCHAR(10) NOT NULL COMMENT '会员级别名称',
+				  min_point INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '该级别最低积分',
+				  max_point INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '该级别最高积分',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_levelid(customer_level)
+				) ENGINE = innodb COMMENT '用户级别信息表' DEFAULT CHARSET=utf8;
+        		]]></LevelInf>
+        		<Addr><![CDATA[
+	        		CREATE TABLE customer_addr(
+				  customer_addr_id INT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '自增主键ID',
+				  customer_id INT UNSIGNED NOT NULL COMMENT 'customer_login表的自增ID',
+				  shipping_user VARCHAR(20) NOT NULL DEFAULT '' COMMENT '收货人姓名',
+				  zip VARCHAR(8) NOT NULL DEFAULT '' COMMENT '邮编',
+				  country SMALLINT NOT NULL DEFAULT 0 COMMENT '国家中国家的ID',
+				  province SMALLINT NOT NULL DEFAULT 0 COMMENT '地区表中省份的ID',
+				  city SMALLINT NOT NULL DEFAULT 0 COMMENT '地区表中城市的ID',
+				  district SMALLINT NOT NULL DEFAULT 0 COMMENT '地区表中的区ID',
+				  address VARCHAR(300) NOT NULL DEFAULT '' COMMENT '具体的地址门牌号',
+				  apartment VARCHAR(20) NOT NULL DEFAULT '' COMMENT  '具体的地址门牌号',
+				  company_name VARCHAR(50) NOT NULL DEFAULT '' COMMENT '公司名',
+				  email VARCHAR(50) NOT NULL DEFAULT '' COMMENT '收件人邮箱',
+				  phone VARCHAR(18) NOT NULL DEFAULT '' COMMENT '手机号',
+				  is_default TINYINT NOT NULL DEFAULT 0 COMMENT '是否默认',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_customeraddid(customer_addr_id)
+				) ENGINE = innodb COMMENT '用户地址表' DEFAULT CHARSET=utf8;
+        		]]></Addr>
+        		<PointLog><![CDATA[
+        			CREATE TABLE customer_point_log(
+				  point_id INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '积分日志ID',
+				  customer_id INT UNSIGNED NOT NULL COMMENT '用户ID',
+				  source TINYINT UNSIGNED NOT NULL COMMENT '积分来源：0订单，1登陆，2活动',
+				  refer_number INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '积分来源相关编号',
+				  change_point SMALLINT NOT NULL DEFAULT 0 COMMENT '变更积分数',
+				  create_time TIMESTAMP NOT NULL COMMENT '积分日志生成时间',
+				  PRIMARY KEY pk_pointid(point_id)
+				) ENGINE = innodb COMMENT '用户积分日志表' DEFAULT CHARSET=utf8;
+        		]]></PointLog>
+        		<BalanceLog><![CDATA[
+        			CREATE TABLE customer_balance_log(
+				  balance_id INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '余额日志ID',
+				  customer_id INT UNSIGNED NOT NULL COMMENT '用户ID',
+				  source TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '记录来源：1订单，2退货单',
+				  source_sn INT UNSIGNED NOT NULL COMMENT '相关单据ID',
+				  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录生成时间',
+				  amount DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '变动金额',
+				  PRIMARY KEY pk_balanceid(balance_id)
+				) ENGINE = innodb COMMENT '用户余额变动表' DEFAULT CHARSET=utf8;
+        		]]></BalanceLog>
+        		<LoginLog><![CDATA[
+        			CREATE TABLE customer_login_log(
+				  login_id INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '登陆日志ID',
+				  customer_id INT UNSIGNED NOT NULL COMMENT '登陆用户ID',
+				  login_time TIMESTAMP NOT NULL COMMENT '用户登陆时间',
+				  login_ip INT UNSIGNED NOT NULL COMMENT '登陆IP',
+				  login_type TINYINT NOT NULL COMMENT '登陆类型：0未成功，1成功',
+				  PRIMARY KEY pk_loginid(login_id)
+				) ENGINE = innodb COMMENT '用户登陆日志表' DEFAULT CHARSET=utf8;
+        		]]></LoginLog>
+		</Customer>
+		<Product>
+			<BrandInfo><![CDATA[
+				CREATE TABLE brand_info(
+				  brand_id SMALLINT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '品牌ID',
+				  brand_name VARCHAR(50) NOT NULL COMMENT '品牌名称',
+				  telephone VARCHAR(50) NOT NULL COMMENT '联系电话',
+				  brand_web VARCHAR(100) COMMENT '品牌网络',
+				  brand_logo VARCHAR(100) COMMENT '品牌logo URL',
+				  brand_desc VARCHAR(150) COMMENT '品牌描述',
+				  brand_status TINYINT NOT NULL DEFAULT 0 COMMENT '品牌状态,0禁用,1启用',
+				  brand_order TINYINT NOT NULL DEFAULT 0 COMMENT '排序',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_brandid (brand_id)
+				)ENGINE=innodb COMMENT '品牌信息表' DEFAULT CHARSET=utf8;;
+			]]></BrandInfo>
+			<Category><![CDATA[
+				CREATE TABLE product_category(
+				  category_id SMALLINT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '分类ID',
+				  category_name VARCHAR(10) NOT NULL COMMENT '分类名称',
+				  category_code VARCHAR(10) NOT NULL DEFAULT '' COMMENT '分类编码',
+				  category_order TINYINT NOT NULL DEFAULT 0 COMMENT '排序',
+				  parent_id SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '父分类ID',
+				  category_level TINYINT NOT NULL DEFAULT 1 COMMENT '分类层级',
+				  category_status TINYINT NOT NULL DEFAULT 1 COMMENT '分类状态',
+				  comment VARCHAR(100) NOT NULL DEFAULT '' COMMENT '分类备注',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT  '最后修改时间',
+				  PRIMARY KEY pk_categoryid(category_id)
+				)ENGINE=innodb COMMENT '商品分类表' DEFAULT CHARSET=utf8;
+			]]></Category>
+			<SuppilerInfo><![CDATA[
+				CREATE TABLE supplier_info(
+				  supplier_id INT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '供应商ID',
+				  supplier_code CHAR(8) NOT NULL COMMENT '供应商编码',
+				  supplier_name CHAR(50) NOT NULL COMMENT '供应商名称',
+				  supplier_type TINYINT NOT NULL COMMENT '供应商类型：1.自营，2.平台',
+				  link_man VARCHAR(10) NOT NULL COMMENT '供应商联系人',
+				  phone_number VARCHAR(50) NOT NULL COMMENT '联系电话',
+				  bank_name VARCHAR(50) NOT NULL COMMENT '供应商开户银行名称',
+				  bank_account VARCHAR(50) NOT NULL COMMENT '银行账号',
+				  address VARCHAR(200) NOT NULL COMMENT '供应商地址',
+				  supplier_status TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0禁止，1启用',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT  '最后修改时间',
+				  PRIMARY KEY pk_supplierid(supplier_id)
+				) ENGINE = innodb COMMENT '供应商信息表' DEFAULT CHARSET=utf8;
+			]]></SuppilerInfo>
+			<Info><![CDATA[
+				CREATE TABLE product_info(
+				  product_id INT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '商品ID',
+				  product_core CHAR(16) NOT NULL DEFAULT '' COMMENT '商品编码',
+				  product_name VARCHAR(20) NOT NULL COMMENT '商品名称',
+				  product_nick_name VARCHAR(20) NOT NULL COMMENT '商品名称',
+				  product_keyword VARCHAR(100) NOT NULL DEFAULT '' COMMENT '商品关键词',
+				  unit_id INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '单位的ID',
+				  supplier_id INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '商品的供应商ID',
+				  area VARCHAR(35) NOT NULL DEFAULT '' COMMENT '所属国家地区',
+				  bar_code VARCHAR(50) NOT NULL DEFAULT 0 COMMENT '国条码',
+				  brand_id INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '品牌表的ID',
+				  one_category_id SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '一级分类ID',
+				  two_category_id SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '二级分类ID',
+				  three_category_id SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '三级分类ID',
+				  price_old DECIMAL(8,2) NOT NULL DEFAULT 0 COMMENT '商品原价格',
+				  price DECIMAL(8,2) NOT NULL COMMENT '商品销售价格',
+				  average_cost DECIMAL(18,2) NOT NULL DEFAULT 0 COMMENT '商品加权平均成本',
+				  publish_status TINYINT NOT NULL DEFAULT 0 COMMENT '上下架状态：0下架1上架',
+				  audit_status TINYINT NOT NULL DEFAULT 0 COMMENT '审核状态：0未审核，1已审核',
+				  weight FLOAT COMMENT '商品重量',
+				  length FLOAT COMMENT '商品长度',
+				  height FLOAT COMMENT '商品高度',
+				  width FLOAT COMMENT '商品宽度',
+				  model_type VARCHAR(128) NOT NULL DEFAULT 'small,middle,large' COMMENT '类型选项',
+				  color_type VARCHAR(128) NOT NULL DEFAULT 'red,yellow,blue,black' COMMENT '色彩选项',
+				  production_date DATETIME COMMENT '生产日期',
+				  shelf_life INT NOT NULL DEFAULT 0 COMMENT '商品有效期',
+				  image_main VARCHAR(64) NOT NULL DEFAULT '' COMMENT '商品主图',
+				  add_status VARCHAR(20) NOT NULL DEFAULT '' COMMENT '补助状态',
+				  comment VARCHAR(64) NOT NULL DEFAULT '' COMMENT '商品备注',
+				  summary VARCHAR(200) NOT NULL DEFAULT '' COMMENT '商品摘要',
+				  descript MEDIUMTEXT NOT NULL COMMENT '商品描述',
+				  indate TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '商品录入时间',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_productid(product_id)
+				) ENGINE = innodb COMMENT '商品信息表' DEFAULT CHARSET=utf8;
+			]]></Info>
+			<PicInfo><![CDATA[
+				CREATE TABLE product_pic_info(
+				  product_pic_id INT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '商品图片ID',
+				  product_id INT UNSIGNED NOT NULL COMMENT '商品ID',
+				  pic_desc VARCHAR(50) COMMENT '图片描述',
+				  pic_url VARCHAR(200) NOT NULL COMMENT '图片URL',
+				  is_master TINYINT NOT NULL DEFAULT 0 COMMENT '是否主图：0.非主图1.主图',
+				  pic_order TINYINT NOT NULL DEFAULT 0 COMMENT '图片排序',
+				  pic_status TINYINT NOT NULL DEFAULT 1 COMMENT '图片是否有效：0无效 1有效',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT  '最后修改时间',
+				  PRIMARY KEY pk_picid(product_pic_id)
+				)ENGINE=innodb COMMENT '商品图片信息表' DEFAULT CHARSET=utf8;;
+			]]></PicInfo>
+			<Comment><![CDATA[
+				CREATE TABLE product_comment(
+				  comment_id INT UNSIGNED AUTO_INCREMENT NOT NULL COMMENT '评论ID',
+				  product_id INT UNSIGNED NOT NULL COMMENT '商品ID',
+				  order_id BIGINT UNSIGNED NOT NULL COMMENT '订单ID',
+				  customer_id INT UNSIGNED NOT NULL COMMENT '用户ID',
+				  title VARCHAR(50) NOT NULL COMMENT '评论标题',
+				  content VARCHAR(300) NOT NULL COMMENT '评论内容',
+				  audit_status TINYINT NOT NULL COMMENT '审核状态：0未审核，1已审核',
+				  audit_time TIMESTAMP NOT NULL COMMENT '评论时间',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_commentid(comment_id)
+				) ENGINE = innodb COMMENT '商品评论表' DEFAULT CHARSET=utf8;;
+			]]></Comment>
+		</Product>
+		<Order>
+			<Master><![CDATA[
+				CREATE TABLE order_master(
+				  order_id INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '订单ID',
+				  order_sn BIGINT UNSIGNED NOT NULL  DEFAULT 0 COMMENT '订单编号 yyyymmddnnnnnnnn',
+				  customer_id INT UNSIGNED NOT NULL COMMENT '下单人ID',
+				  shipping_user VARCHAR(20) NOT NULL  DEFAULT '' COMMENT '收货人姓名',
+				  zip VARCHAR(8) NOT NULL DEFAULT '' COMMENT '邮编',
+				  country SMALLINT NOT NULL DEFAULT 0 COMMENT '国家中国家的ID', 
+				  province SMALLINT NOT NULL DEFAULT 0 COMMENT '省',
+				  city SMALLINT NOT NULL DEFAULT 0 COMMENT '市',
+				  district SMALLINT NOT NULL  DEFAULT 0 COMMENT '区',
+				  address VARCHAR(100) NOT NULL  DEFAULT '' COMMENT '地址',
+				  comment VARCHAR(100) NOT NULL  DEFAULT '' COMMENT '备注',
+				  apartment VARCHAR(20) NOT NULL  DEFAULT '' COMMENT '具体的地址门牌号',
+				  company_name VARCHAR(50) NOT NULL DEFAULT '' COMMENT '公司名',
+				  email VARCHAR(50) NOT NULL DEFAULT '' COMMENT '收件人邮箱',
+				  phone VARCHAR(18) NOT NULL DEFAULT '' COMMENT '手机号',
+				  payment_method TINYINT NOT NULL DEFAULT 0 COMMENT '支付方式：1现金，2余额，3网银，4支付宝，5微信',
+				  order_money DECIMAL(8,2) NOT NULL COMMENT '订单金额',
+				  district_money DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '优惠金额',
+				  shipping_money DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '运费金额',
+				  payment_money DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '支付金额',
+				  shipping_comp_name VARCHAR(10) COMMENT '快递公司名称',
+				  shipping_sn VARCHAR(50) COMMENT '快递单号',
+				  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下单时间',
+				  shipping_time DATETIME COMMENT '发货时间',
+				  pay_time DATETIME COMMENT '支付时间',
+				  receive_time DATETIME COMMENT '收货时间',
+				  order_status TINYINT NOT NULL DEFAULT 0 COMMENT '订单状态',
+				  order_point INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '订单积分',
+				  invoice_time VARCHAR(100) COMMENT '发票抬头',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_orderid(order_id)
+				)ENGINE = innodb COMMENT '订单主表' DEFAULT CHARSET=utf8;
+			]]></Master>
+			<Detail><![CDATA[
+				CREATE TABLE order_detail(
+				  order_detail_id INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '订单详情表ID',
+				  order_id INT UNSIGNED NOT NULL DEFAULT 0  COMMENT '订单表ID',
+				  product_id INT UNSIGNED NOT NULL COMMENT '订单商品ID',
+				  product_name VARCHAR(50) NOT NULL COMMENT '商品名称',
+				  image VARCHAR(64) NOT NULL DEFAULT '' COMMENT '商品主图',
+				  average_cost DECIMAL(8,2) NOT NULL DEFAULT 0 COMMENT '平均成本价格',
+				  model_type VARCHAR(32) NOT NULL DEFAULT '' COMMENT '类型选项',
+				  color_type VARCHAR(32) NOT NULL DEFAULT '' COMMENT '色彩选项',
+				  num INT NOT NULL DEFAULT 1 COMMENT '购买商品数量',
+				  price DECIMAL(8,2) NOT NULL COMMENT '购买商品单价',
+				  total DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '商品小计',
+				  fee_money DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '优惠分摊金额',
+				  w_id INT UNSIGNED NOT NULL COMMENT '仓库ID',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  status TINYINT NOT NULL DEFAULT 0 COMMENT '状态',
+				  PRIMARY KEY pk_orderdetailid(order_detail_id)
+				)ENGINE = innodb COMMENT '订单详情表' DEFAULT CHARSET=utf8;
+			]]></Detail>
+			<Cart><![CDATA[
+				CREATE TABLE order_cart(
+				  cart_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '购物车ID',
+				  customer_id BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+				  product_id INT UNSIGNED NOT NULL COMMENT '商品ID',
+				  order_id INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '订单表ID',
+				  product_name VARCHAR(20) NOT NULL COMMENT '商品名称',
+				  image VARCHAR(64) NOT NULL DEFAULT '' COMMENT '商品主图',
+				  model_type VARCHAR(32) NOT NULL DEFAULT '' COMMENT '类型选项',
+				  color_type VARCHAR(32) NOT NULL DEFAULT '' COMMENT '色彩选项',
+				  num INT NOT NULL COMMENT '加入购物车商品数量',
+				  price DECIMAL(8,2) NOT NULL COMMENT '商品价格',
+				  total DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '商品小计',
+				  add_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入购物车时间',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  status TINYINT NOT NULL DEFAULT 0 COMMENT '状态',
+				  PRIMARY KEY pk_cartid(cart_id)
+				) ENGINE = innodb COMMENT '购物车表' DEFAULT CHARSET=utf8;;
+			]]></Cart>
+			<Wish><![CDATA[
+				CREATE TABLE order_wish(
+				  wish_id INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '关注ID',
+				  customer_id INT UNSIGNED NOT NULL COMMENT '用户ID',
+				  product_id INT UNSIGNED NOT NULL COMMENT '商品ID',
+				  product_amount INT NOT NULL COMMENT '加入商品数量',
+				  price DECIMAL(8,2) NOT NULL COMMENT '商品价格',
+				  add_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+				      modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_cartid(wish_id)
+				) ENGINE = innodb COMMENT '关注表' DEFAULT CHARSET=utf8;;
+			]]></Wish>
+			<WarehouseInfo><![CDATA[
+			  	CREATE TABLE warehouse_info(
+				  w_id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '仓库ID',
+				  warehouse_sn CHAR(5) NOT NULL COMMENT '仓库编码',
+				  warehoust_name VARCHAR(10) NOT NULL COMMENT '仓库名称',
+				  warehouse_phone VARCHAR(20) NOT NULL COMMENT '仓库电话',
+				  contact VARCHAR(10) NOT NULL COMMENT '仓库联系人',
+				  province SMALLINT NOT NULL COMMENT '省',
+				  city SMALLINT NOT NULL COMMENT '市',
+				  distrct SMALLINT NOT NULL COMMENT '区',
+				  address VARCHAR(100) NOT NULL COMMENT '仓库地址',
+				  warehouse_status TINYINT NOT NULL DEFAULT 1 COMMENT '仓库状态：0禁用，1启用',
+				        modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_wid(w_id)
+				)ENGINE = innodb COMMENT '仓库信息表' DEFAULT CHARSET=utf8;;
+			]]></WarehouseInfo>
+			<WarehouseProduct><![CDATA[
+				CREATE TABLE warehouse_product(
+				  wp_id INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '商品库存ID',
+				  product_id INT UNSIGNED NOT NULL COMMENT '商品ID',
+				  w_id SMALLINT UNSIGNED NOT NULL COMMENT '仓库ID',
+				  current_cnt INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当前商品数量',
+				  lock_cnt INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当前占用数据',
+				  in_transit_cnt INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '在途数据',
+				  average_cost DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '移动加权成本',
+				  modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_wpid(wp_id)
+				)ENGINE = innodb COMMENT '商品库存表' DEFAULT CHARSET=utf8;
+			]]></WarehouseProduct>
+			<ShippingInfo><![CDATA[
+				CREATE TABLE shipping_info(
+				  ship_id TINYINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+				  ship_name VARCHAR(20) NOT NULL COMMENT '物流公司名称',
+				  ship_contact VARCHAR(20) NOT NULL COMMENT '物流公司联系人',
+				  telephone VARCHAR(20) NOT NULL COMMENT '物流公司联系电话',
+				  price DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '配送价格',
+				    modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+				  PRIMARY KEY pk_shipid(ship_id)
+				)ENGINE = innodb COMMENT '物流公司信息表' DEFAULT CHARSET=utf8;;
+			]]></ShippingInfo>
+		</Order>
+	</_TableDefine>
+	<InitData>
+		<Product>
+			<Category>
+			<![CDATA[
+	            INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (1, '商城分类列表', '01', 0, 1, 1, '2020-01-29 15:39:23');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (11, '蔬菜水果', '010011', 1, 2, 1, '2020-01-29 15:40:31');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (12, '手机数码', '0112', 1, 2, 1, '2020-01-29 15:43:01');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (13, '电脑配件', '0113', 1, 2, 1, '2020-01-29 15:44:12');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (14, '服装鞋帽', '0114', 1, 2, 1, '2020-01-29 15:46:01');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (111, '蔬菜', '010111', 11, 3, 1, '2020-01-29 15:40:35');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (112, '苹果', '010112', 11, 3, 1, '2020-01-29 15:41:06');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (113, '大蒜', '010113', 11, 3, 1, '2020-01-29 15:41:29');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (114, '白菜', '010114', 11, 3, 1, '2020-01-29 15:41:52');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (115, '青菜', '010115', 11, 3, 1, '2020-01-29 15:42:20');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (121, '手机', '0112121', 12, 3, 1, '2020-01-29 15:43:21');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (122, '照相机', '0112122', 12, 3, 1, '2020-01-29 15:43:46');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (131, '手机', '0113131', 13, 3, 1, '2020-01-29 15:44:44');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (132, '照相机', '01122', 13, 3, 1, '2020-01-29 15:45:40');
+				INSERT INTO `product_category`(`category_id`, `category_name`, `category_code`, `parent_id`, `category_level`, `category_status`, `modified_time`) VALUES (141, '手机', '01141', 14, 3, 1, '2020-01-29 15:46:30');
+        		]]>
+			</Category>
+		</Product>
+	</InitData>
+	<UI>
+		<_Navigator><![CDATA[
+            [{
+            		"text": "系统首页",
+            		"link": "home.html",
+            		"icon_class": "icon_home"
+            },{
+            		"text": "产品管理",
+            		"link": "#",
+            		"icon_class": "icon-desktop",
+            		"children": [{
+	            		"text": "产品类表",
+	            		"link": "Products_List.html"
+	            },{
+	            		"text": "品牌管理",
+	            		"link": "Brand_Manage.html"
+	            },{
+	            		"text": "分类管理",
+	            		"link": "Category_Manage.html"
+	            }]
+            },{
+            		"text": "图片管理",
+            		"link": "#",
+            		"icon_class": "icon-picture",
+            		"children": [{
+	            		"text": "广告管理",
+	            		"link": "advertising.html"
+	            },{
+	            		"text": "分类管理",
+	            		"link": "Sort_ads.html"
+	            }]
+            },{
+            		"text": "交易管理",
+            		"link": "#",
+            		"icon_class": "icon-list",
+            		"children" :[{
+	            		"text": "交易信息",
+	            		"link": "transaction.html"
+	            },{
+	            		"text": "订单管理",
+	            		"link": "Orderform.html"
+	            },{
+	            		"text": "订单处理",
+	            		"link": "Order_handling.html"
+	            },{
+	            		"text": "退款管理",
+	            		"link": "Refund.html"
+	            }]
+            },{
+            		"text": "会员管理",
+            		"link": "#",
+            		"icon_class": "icon-list",
+            		"children" :[{
+	            		"text": "会员列表",
+	            		"link": "user_list.html"
+	            },{
+	            		"text": "等级管理",
+	            		"link": "member-Grading.html"
+	            },{
+	            		"text": "会员记录",
+	            		"link": "integration.html"
+	            }]
+            }]
+        ]]></_Navigator>
+	</UI>
+	<_Navigator><![CDATA[
+            [{
+            		"text": "系统首页",
+            		"link": "home.html",
+            		"icon_class": "icon_home"
+            },{
+            		"text": "产品管理",
+            		"link": "#",
+            		"icon_class": "icon-desktop",
+            		"children": [{
+	            		"text": "产品类表",
+	            		"link": "Products_List.html"
+	            },{
+	            		"text": "品牌管理",
+	            		"link": "Brand_Manage.html"
+	            },{
+	            		"text": "分类管理",
+	            		"link": "Category_Manage.html"
+	            }]
+            },{
+            		"text": "图片管理",
+            		"link": "#",
+            		"icon_class": "icon-picture",
+            		"children": [{
+	            		"text": "广告管理",
+	            		"link": "advertising.html"
+	            },{
+	            		"text": "分类管理",
+	            		"link": "Sort_ads.html"
+	            }]
+            },{
+            		"text": "交易管理",
+            		"link": "#",
+            		"icon_class": "icon-list",
+            		"children" :[{
+	            		"text": "交易信息",
+	            		"link": "transaction.html"
+	            },{
+	            		"text": "订单管理",
+	            		"link": "Orderform.html"
+	            },{
+	            		"text": "订单处理",
+	            		"link": "Order_handling.html"
+	            },{
+	            		"text": "退款管理",
+	            		"link": "Refund.html"
+	            }]
+            },{
+            		"text": "账户管理",
+            		"link": "#",
+            		"icon_class": "icon-user",
+            		"children": [{
+	            		"text": "账户管理",
+	            		"link": "Cover_management.htmll"
+	            },{
+	            		"text": "支付方式",
+	            		"link": "payment_method.html"
+	            },{
+	            		"text": "支付配置",
+	            		"link": "Payment_Configure.html"
+	            }]
+            },{
+            		"text": "会员管理",
+            		"link": "#",
+            		"icon_class": "icon-user",
+            		"children": [{
+	            		"text": "会员列表",
+	            		"link": "user_list.html"
+	            },{
+	            		"text": "等级管理",
+	            		"link": "member-Grading.html"
+	            },{
+	            		"text": "会员记录管理",
+	            		"link": "integration.html"
+	            }]
+            }]
+        ]]></_Navigator>
+</WebService>
